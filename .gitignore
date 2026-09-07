@@ -1,0 +1,29 @@
+# generated
+/dist
+/stubs
+
+# Python
+__pycache__/
+.ruff_cache/
+*.py[oc]
+wheels/
+*.egg-info
+.venv
+
+# Kotlin
+/build
+/.kotlin/
+
+# IDEA
+*.iml
+/.idea/
+
+# bruh
+.DS_Store
+/captures
+/.claude/
+
+# Gradle
+.gradle
+local.properties
+

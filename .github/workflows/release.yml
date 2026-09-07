@@ -1,0 +1,160 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Plugin version in x.x.x format
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  attestations: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Validate release version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version must match x.x.x" >&2
+            exit 1
+          fi
+
+      - name: Resolve plugin source file
+        id: plugin
+        run: |
+          plugin_py="$(grep -ls '^__id__ = ' -- *.py | head -n1)"
+          if [[ -z "$plugin_py" ]]; then
+            echo "No plugin .py with __id__ found in the repository root" >&2
+            exit 1
+          fi
+          plugin_id="$(sed -n 's/^__id__ = "\(.*\)"$/\1/p' "$plugin_py")"
+          if [[ -z "$plugin_id" ]]; then
+            echo "Failed to read __id__ from $plugin_py" >&2
+            exit 1
+          fi
+          echo "file=${plugin_py}" >> "$GITHUB_OUTPUT"
+          echo "id=${plugin_id}" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure Telegram JAR exists
+        run: |
+          if [[ ! -s libs/Telegram.jar ]]; then
+            echo "libs/Telegram.jar is missing. Commit the host JAR to libs/ (see 'just update-apk')." >&2
+            exit 1
+          fi
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platform-tools" "build-tools;36.1.0" "platforms;android-36.1"
+
+      - name: Point Gradle to runner Android SDK
+        run: |
+          printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > local.properties
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up just
+        uses: extractions/setup-just@v3
+
+      - name: Bump plugin version
+        env:
+          VERSION: ${{ inputs.version }}
+          PLUGIN_PY: ${{ steps.plugin.outputs.file }}
+        run: |
+          python scripts/prepare_release.py \
+            --version "$VERSION" \
+            --plugin-file "$PLUGIN_PY" \
+            --pyproject-file pyproject.toml
+
+      - name: Build the release plugin
+        env:
+          GRADLE_OPTS: -Dorg.gradle.daemon=false
+          VERSION: ${{ inputs.version }}
+          PLUGIN_ID: ${{ steps.plugin.outputs.id }}
+        run: |
+          chmod +x gradlew
+          release_dir="$RUNNER_TEMP/release"
+          rm -rf "$release_dir"
+          mkdir -p "$release_dir"
+          just ci-release "$VERSION" "$release_dir/${PLUGIN_ID}.plugin"
+          cp dist/dex/release/classes.dex "$release_dir/classes.dex"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            ${{ runner.temp }}/release/${{ steps.plugin.outputs.id }}.plugin
+            ${{ runner.temp }}/release/classes.dex
+
+      - name: Configure Git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit release metadata
+        env:
+          VERSION: ${{ inputs.version }}
+          PLUGIN_PY: ${{ steps.plugin.outputs.file }}
+        run: |
+          git add "$PLUGIN_PY" pyproject.toml
+          git diff --cached --quiet && {
+            echo "No plugin metadata changes to commit" >&2
+            exit 1
+          }
+          git commit -m "release: ${VERSION}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Create and push tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if git rev-parse "refs/tags/${VERSION}" >/dev/null 2>&1; then
+            echo "Tag ${VERSION} already exists" >&2
+            exit 1
+          fi
+          git tag "${VERSION}"
+          git push origin "refs/tags/${VERSION}"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          PLUGIN_ID: ${{ steps.plugin.outputs.id }}
+        run: |
+          release_dir="$RUNNER_TEMP/release"
+          gh release create "$VERSION" \
+            "$release_dir/${PLUGIN_ID}.plugin#${PLUGIN_ID}.plugin" \
+            "$release_dir/classes.dex#classes.dex" \
+            --title "$VERSION" \
+            --notes ""
