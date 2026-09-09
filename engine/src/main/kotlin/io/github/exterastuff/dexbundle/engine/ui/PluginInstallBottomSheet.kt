@@ -4,6 +4,7 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.text.Layout
 import android.text.SpannableStringBuilder
+import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -22,13 +23,17 @@ import io.github.exterastuff.dexbundle.engine.compat.ExteraConfigCompat
 import io.github.exterastuff.dexbundle.engine.eject.EjectNotifier
 import io.github.exterastuff.dexbundle.engine.i18n.Strings
 import io.github.exterastuff.dexbundle.engine.impl.DexBundlePluginsEngine
+import io.github.exterastuff.dexbundle.engine.impl.SignerInfo
 import io.github.exterastuff.dexbundle.engine.util.runOnMainThread
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.AndroidUtilities.dp
+import org.telegram.messenger.MediaDataController
 import org.telegram.messenger.R
+import org.telegram.messenger.UserConfig
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ActionBar.BottomSheet
 import org.telegram.ui.ActionBar.Theme
+import org.telegram.ui.Components.BackupImageView
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.CheckBox2
 import org.telegram.ui.Components.EffectsTextView
@@ -41,6 +46,8 @@ class PluginInstallBottomSheet(
     private val fragment: BaseFragment,
     private val plugin: Plugin,
     private val params: PluginInstallParams,
+    private val signature: PluginSignatureState,
+    signers: Map<String, SignerInfo>?,
 ) : BottomSheet(fragment.parentActivity, false, fragment.resourceProvider),
     EjectNotifier.Delegate {
 
@@ -55,17 +62,23 @@ class PluginInstallBottomSheet(
         private const val HINT_SHOWN_UNKNOWN_KEY =
             "dexengine_plugin_source_hint_unknown"
 
-        fun show(fragment: BaseFragment, plugin: Plugin, params: PluginInstallParams) =
-            runOnMainThread {
-                PluginInstallBottomSheet(fragment, plugin, params).show()
-            }
+        fun show(
+            fragment: BaseFragment,
+            plugin: Plugin,
+            params: PluginInstallParams,
+            signature: PluginSignatureState,
+            signers: Map<String, SignerInfo>?,
+        ) = runOnMainThread {
+            PluginInstallBottomSheet(fragment, plugin, params, signature, signers).show()
+        }
     }
 
     private val unsubscribeFromEject = EjectNotifier.subscribe(this)
 
-    private val isUpdate = PluginsController.getInstance()
-        .plugins
-        .containsKey(plugin.getId())
+    private val installedPlugin = PluginsController.getInstance()
+        .plugins[plugin.getId()]
+
+    private val isUpdate = installedPlugin != null
 
     private var enableAfterInstallation = false
 
@@ -73,12 +86,21 @@ class PluginInstallBottomSheet(
 
     private var currentHint: HintView2? = null
 
-    private lateinit var sourceChip: View
+    private var sourceChip: View? = null
+
+    private lateinit var signatureChip: View
+
+    private val issuers = signers
+        ?.values
+        ?.map(SignerInfo::issuer)
+        ?.distinct()
+        .orEmpty()
 
     private val button = ButtonWithCounterView(context, true, resourcesProvider).apply {
         setRound()
         setText(installButtonText(), false)
-        setSubText(null, false)
+        setSubText(if (signature.blocksInstall) Strings.signatureMismatch() else null, false)
+        isEnabled = !signature.blocksInstall
         setOnClickListener { onInstallClick() }
     }
 
@@ -118,9 +140,32 @@ class PluginInstallBottomSheet(
             LayoutHelper.createLinear(MATCH_PARENT, WRAP_CONTENT, 0, 21f, 4f, 21f, 0f)
         )
 
+        // trusted signature makes the source irrelevant
+        if (signature != PluginSignatureState.TRUSTED)
+            content.addView(
+                createSourceChip(),
+                LayoutHelper.createLinear(
+                    WRAP_CONTENT,
+                    WRAP_CONTENT,
+                    Gravity.CENTER,
+                    0f,
+                    12f,
+                    0f,
+                    0f
+                )
+            )
+
         content.addView(
-            createSourceChip(),
-            LayoutHelper.createLinear(WRAP_CONTENT, WRAP_CONTENT, Gravity.CENTER, 0f, 12f, 0f, 0f)
+            createSignatureChip(),
+            LayoutHelper.createLinear(
+                WRAP_CONTENT,
+                WRAP_CONTENT,
+                Gravity.CENTER,
+                21f,
+                if (sourceChip == null) 12f else 6f,
+                21f,
+                0f
+            )
         )
 
         content.addView(
@@ -130,7 +175,7 @@ class PluginInstallBottomSheet(
 
         content.addView(button, LayoutHelper.createLinear(MATCH_PARENT, 48, 0, 16f, 28f, 16f, 16f))
 
-        if (!plugin.isEnabled() && !ExteraConfigCompat.isPluginsSafeMode())
+        if (installedPlugin?.isEnabled() != true && !ExteraConfigCompat.isPluginsSafeMode())
             content.addView(
                 createEnableAfterInstallationCheckbox(),
                 LayoutHelper.createLinear(
@@ -146,8 +191,12 @@ class PluginInstallBottomSheet(
 
         setCustomView(ScrollView(context).apply { addView(content) })
 
-        if (!wasSourceHintShown())
-            AndroidUtilities.runOnUIThread({ sourceChip.performClick() }, 600)
+        AndroidUtilities.runOnUIThread({
+            if (signature.blocksInstall)
+                signatureChip.performClick()
+            else if (!wasSourceHintShown())
+                sourceChip?.performClick()
+        }, 600)
     }
 
     private fun installButtonText(): String =
@@ -216,11 +265,81 @@ class PluginInstallBottomSheet(
         }
 
     private fun createSourceChip(): View {
-        val color = getThemedColor(
-            if (params.trusted) Theme.key_windowBackgroundWhiteGreenText
-            else Theme.key_text_RedRegular
-        )
+        val chip = createChip(
+            iconRes = if (params.trusted) R.drawable.trusted_mini else R.drawable.unknown_mini,
+            text = if (params.trusted) Strings.sourceTrusted() else Strings.sourceUnknown(),
+            color = getThemedColor(
+                if (params.trusted) Theme.key_windowBackgroundWhiteGreenText
+                else Theme.key_text_RedRegular
+            )
+        ) { anchor ->
+            showHint(
+                anchor,
+                if (params.trusted) Strings.sourceTrustedInfo() else Strings.sourceUnknownInfo()
+            )
 
+            markSourceHintShown()
+        }
+
+        sourceChip = chip
+        return chip
+    }
+
+    private fun createSignatureChip(): View {
+        val chip = createChip(
+            iconRes = when (signature) {
+                PluginSignatureState.TRUSTED -> R.drawable.trusted_mini
+                PluginSignatureState.UNTRUSTED -> R.drawable.msg_mini_lock3
+                PluginSignatureState.MISSING -> R.drawable.unknown_mini
+                PluginSignatureState.EXPIRED,
+                PluginSignatureState.MISMATCH -> R.drawable.warning_sign
+            },
+            text = signatureChipText(),
+            color = getThemedColor(
+                when (signature) {
+                    PluginSignatureState.TRUSTED -> Theme.key_windowBackgroundWhiteGreenText
+                    PluginSignatureState.UNTRUSTED -> Theme.key_windowBackgroundWhiteGrayText
+                    else -> Theme.key_text_RedRegular
+                }
+            )
+        ) { anchor ->
+            showHint(
+                anchor,
+                when (signature) {
+                    PluginSignatureState.TRUSTED -> Strings.signatureTrustedInfo()
+                    PluginSignatureState.UNTRUSTED -> Strings.signatureUntrustedInfo()
+                    PluginSignatureState.MISSING -> Strings.signatureMissingInfo()
+                    PluginSignatureState.EXPIRED -> Strings.signatureExpiredInfo()
+                    PluginSignatureState.MISMATCH -> Strings.signatureMismatchInfo()
+                }
+            )
+        }
+
+        signatureChip = chip
+        return chip
+    }
+
+    private fun signatureChipText(): String {
+        val state = when (signature) {
+            PluginSignatureState.TRUSTED -> Strings.signatureTrusted()
+            PluginSignatureState.UNTRUSTED -> Strings.signatureUntrusted()
+            PluginSignatureState.MISSING -> Strings.signatureMissing()
+            PluginSignatureState.EXPIRED -> Strings.signatureExpired()
+            PluginSignatureState.MISMATCH -> Strings.signatureMismatch()
+        }
+
+        if (issuers.isEmpty())
+            return state
+
+        return "$state • ${issuers.joinToString(", ")}"
+    }
+
+    private fun createChip(
+        iconRes: Int,
+        text: CharSequence,
+        color: Int,
+        onClick: (anchor: View) -> Unit,
+    ): View {
         val chip = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -233,7 +352,7 @@ class PluginInstallBottomSheet(
 
             addView(
                 ImageView(context).apply {
-                    setImageResource(if (params.trusted) R.drawable.trusted_mini else R.drawable.unknown_mini)
+                    setImageResource(iconRes)
                     colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
                 },
                 LayoutHelper.createLinear(14, 14, Gravity.CENTER_VERTICAL, 0f, 0f, 6f, 0f)
@@ -244,19 +363,17 @@ class PluginInstallBottomSheet(
                     typeface = AndroidUtilities.regular()
                     setTextColor(color)
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                    text = if (params.trusted)
-                        Strings.sourceTrusted()
-                    else
-                        Strings.sourceUnknown()
+                    maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.END
+                    this.text = text
                 }
             )
 
-            setOnClickListener { showSourceHint(it) }
+            setOnClickListener { onClick(it) }
         }
 
         ScaleStateListAnimator.apply(chip, 0.05f, 1.5f)
 
-        sourceChip = chip
         return chip
     }
 
@@ -326,21 +443,14 @@ class PluginInstallBottomSheet(
             false
         )
 
-    private fun showSourceHint(anchor: View) {
+    private fun showHint(anchor: View, text: CharSequence) {
         currentHint?.hide()
 
         val hint = HintView2(context, HINT_DIRECTION)
             .setMultilineText(true)
             .setBgColor(getThemedColor(Theme.key_undo_background))
             .setTextColor(getThemedColor(Theme.key_undo_infoColor))
-            .setText(
-                AndroidUtilities.replaceTags(
-                    if (params.trusted)
-                        Strings.sourceTrustedInfo()
-                    else
-                        Strings.sourceUnknownInfo()
-                )
-            )
+            .setText(AndroidUtilities.replaceTags(text.toString()))
             .setTextAlign(Layout.Alignment.ALIGN_CENTER)
             .allowBlur(true)
             .setRounding(12f)
@@ -376,17 +486,18 @@ class PluginInstallBottomSheet(
             hint.setDuration(5500)
             hint.show()
         }
+    }
 
+    private fun markSourceHintShown() =
         ExteraConfigCompat.getEditor()
             .putBoolean(
                 if (params.trusted) HINT_SHOWN_TRUSTED_KEY else HINT_SHOWN_UNKNOWN_KEY,
                 true
             )
             .apply()
-    }
 
     private fun onInstallClick() {
-        if (installing)
+        if (installing || signature.blocksInstall)
             return
 
         installing = true

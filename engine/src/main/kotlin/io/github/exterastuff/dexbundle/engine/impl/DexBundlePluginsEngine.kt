@@ -10,16 +10,20 @@ import dalvik.system.DexClassLoader
 import io.github.exterastuff.dexbundle.api.BasePlugin
 import io.github.exterastuff.dexbundle.engine.compat.ExteraConfigCompat
 import io.github.exterastuff.dexbundle.engine.extension.format
+import io.github.exterastuff.dexbundle.engine.i18n.Strings
 import io.github.exterastuff.dexbundle.engine.ui.PluginInstallBottomSheet
+import io.github.exterastuff.dexbundle.engine.ui.PluginSignatureState
 import io.github.exterastuff.dexbundle.engine.util.Logger
 import io.github.exterastuff.dexbundle.engine.util.runOnMainThread
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.MessageObject
+import org.telegram.messenger.R
 import org.telegram.messenger.SendMessagesHelper
 import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.BaseFragment
+import org.telegram.ui.Components.BulletinFactory
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
@@ -115,7 +119,7 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         val file = pluginFile(id)
         file.setWritable(false)
 
-        val manifest = PluginManifest.parse(file)
+        val manifest = PluginManifest.of(file)
             ?: throw IllegalArgumentException("Provided file is not a plugin")
 
         val classLoader = DexClassLoader(
@@ -187,9 +191,15 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         if (file.extension != "jar")
             return false
 
-        return runCatching { PluginManifest.parse(file) }
-            .onFailure { Logger.info("broken manifest: ${it.toString()}") }
-            .getOrNull() != null
+        return try {
+            PluginManifest.of(file) != null
+        } catch (_: SecurityException) {
+            // подпись сломана, но надо пробросить, чтоб показать буллетин
+            true
+        } catch (e: Throwable) {
+            Logger.info("broken manifest: $e")
+            false
+        }
     }
 
     override fun isEngineAvailable(): Boolean =
@@ -208,7 +218,7 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         pluginFiles
             .filter { file -> file.isFile && file.extension == PLUGINS_EXTENSION }
             .mapNotNull { file ->
-                val manifest = runCatching { PluginManifest.parse(file) }.getOrNull()
+                val manifest = runCatching { PluginManifest.of(file) }.getOrNull()
                     ?: return@mapNotNull null
 
                 if (file.nameWithoutExtension != manifest.id)
@@ -465,22 +475,52 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         )
     }
 
+    private fun installedSigners(pluginId: String): Map<String, SignerInfo>? {
+        val file = pluginFile(pluginId)
+            .takeIf(File::exists)
+            ?: return null
+
+        return runCatching { PluginManifest.of(file) }
+            .onFailure { info("failed to read installed plugin '$pluginId': $it") }
+            .getOrNull()
+            ?.signers
+    }
+
     override fun showInstallDialog(
         fragment: BaseFragment,
         params: InstallPluginBottomSheet.PluginInstallParams
     ) {
         info("show install dialog for '${params.filePath}'")
 
-        val manifest = runCatching { PluginManifest.parse(File(params.filePath)) }
-            .onFailure { info("broken manifest: $it") }
-            .getOrNull()
+        val manifest = try {
+            PluginManifest.of(File(params.filePath))
+        } catch (e: SecurityException) {
+            info("broken signature: $e")
+
+            runOnMainThread {
+                BulletinFactory.of(fragment)
+                    .createSimpleBulletin(R.raw.error, Strings.signatureBroken())
+                    .show()
+            }
+
+            return
+        } catch (e: Throwable) {
+            info("broken manifest: $e")
+            null
+        }
 
         if (manifest == null) {
             info("install dialog is not shown: file has no valid plugin manifest")
             return
         }
 
-        PluginInstallBottomSheet.show(fragment, manifest.toPlugin(), params)
+        PluginInstallBottomSheet.show(
+            fragment,
+            manifest.toPlugin(),
+            params,
+            PluginSignatureState.of(manifest.signers, installedSigners(manifest.id)),
+            manifest.signers
+        )
     }
 
     override fun openPluginSettings(

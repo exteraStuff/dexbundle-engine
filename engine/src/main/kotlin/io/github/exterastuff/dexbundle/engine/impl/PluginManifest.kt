@@ -4,9 +4,7 @@ import com.exteragram.messenger.plugins.Plugin
 import io.github.exterastuff.dexbundle.engine.exception.InvalidPluginManifestException
 import io.github.exterastuff.dexbundle.engine.util.Logger
 import java.io.File
-import java.io.FileNotFoundException
 import java.util.jar.JarFile
-import java.util.zip.ZipException
 
 data class PluginManifest(
     val id: String,
@@ -17,6 +15,9 @@ data class PluginManifest(
     val version: String,
     val minClientVersion: String,
     val entryClass: String,
+
+    // signing
+    val signers: LinkedHashMap<String, SignerInfo>?,
 ) {
     companion object {
         private val ID_REGEX =
@@ -41,23 +42,9 @@ data class PluginManifest(
         private fun isValidClassFqn(s: String): Boolean =
             CLASS_FQN_REGEX.matches(s) && s.split('.', '$').none { it in JAVA_KEYWORDS }
 
-        fun parse(file: File): PluginManifest? = JarFile(file).use {
-            val jarFile = try {
-                JarFile(file)
-            } catch (_: NoSuchFileException) {
-                // file not found
-                Logger.info("file not found")
-                return null
-            } catch (_: FileNotFoundException) {
-                Logger.info("file not found")
-                // file not found
-                return null
-            } catch (_: ZipException) {
-                Logger.info("zip is broken")
-                // broken or non-zip
-                return null
-            }
-
+        // as part of jar signature verification
+        @Throws(SecurityException::class)
+        fun of(file: File): PluginManifest? = JarFile(file, true).use { jarFile ->
             // regular jar file
             val manifest = jarFile.manifest?.mainAttributes
                 ?: run {
@@ -90,7 +77,9 @@ data class PluginManifest(
 
                 entryClass = getAttribute("Plugin-Class")
                     .takeIf(::isValidClassFqn)
-                    ?: throw InvalidPluginManifestException("Invalid main class FQN")
+                    ?: throw InvalidPluginManifestException("Invalid main class FQN"),
+
+                signers = SignerInfo.of(jarFile)
             )
         }
     }
