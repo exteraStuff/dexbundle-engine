@@ -156,7 +156,22 @@ class PluginInstallBottomSheet(
         else
             Strings.installPlugin()
 
-    private fun createIcon(): View =
+    private fun createIcon(): View {
+        val pack = plugin.getPack()
+        val index = plugin.getIndex()
+
+        if (pack == null || index < 0)
+            return createDefaultIcon()
+
+        return BackupImageView(context).apply {
+            imageReceiver.autoRepeat = 1
+
+            MediaDataController.getInstance(UserConfig.selectedAccount)
+                .setPlaceholderImageByIndex(this, pack, index, "${ICON_SIZE}_$ICON_SIZE")
+        }
+    }
+
+    private fun createDefaultIcon(): View =
         ImageView(context).apply {
             scaleType = ImageView.ScaleType.FIT_CENTER
             setImageResource(R.drawable.plugins_filled)
