@@ -13,7 +13,6 @@ import io.github.exterastuff.dexbundle.engine.extension.format
 import io.github.exterastuff.dexbundle.engine.ui.PluginInstallBottomSheet
 import io.github.exterastuff.dexbundle.engine.util.Logger
 import io.github.exterastuff.dexbundle.engine.util.runOnMainThread
-import kotlinx.collections.immutable.toImmutableSet
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.SendMessagesHelper
@@ -197,11 +196,29 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
     override fun init(callback: Runnable) {
         info("init")
 
-        ownPlugins.forEach { it.cachedEngine = this }
+        val pluginsDir = pluginsController.pluginsDir
 
-        ownPlugins
-            .filter { it.isEnabled() }
-            .forEach { setPluginEnabled(it.getId(), true) {} }
+        val pluginFiles = pluginsDir
+            .listFiles()
+            ?: return
+
+        pluginFiles
+            .filter { file -> file.isFile && file.extension == PLUGINS_EXTENSION }
+            .mapNotNull { file ->
+                val manifest = runCatching { PluginManifest.parse(file) }.getOrNull()
+                    ?: return@mapNotNull null
+
+                if (file.nameWithoutExtension != manifest.id)
+                    return@mapNotNull null
+
+                return@mapNotNull manifest
+            }
+            .forEach { manifest ->
+                val pluginId = manifest.id
+
+                pluginsController.plugins[pluginId] = manifest.toPlugin()
+                setPluginEnabled(pluginId, loadPluginEnabled(pluginId)) {}
+            }
     }
 
     override fun checkDevServer() {
@@ -225,22 +242,29 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         info("shutdown")
 
         try {
-            activePlugins
-                .keys
-                .toImmutableSet()
+            val plugins = pluginsController.plugins
+
+            activePlugins.keys
+                .toList()
                 .forEach { runCatching { unloadPlugin(it) } }
+
+            ownPlugins
+                .map { it.getId() }
+                .forEach(plugins::remove)
 
             // clear all refs
             activePlugins.clear()
 
             // TODO: stop dev server
-            // TODO: unload all plugins
         } catch (e: Throwable) {
             info("Failed to shutdown plugins engine: ${e.toString()}")
         }
 
         callback.run()
     }
+
+    private fun loadPluginEnabled(pluginId: String): Boolean =
+        pluginsController.preferences.getBoolean("plugin_enabled_$pluginId", false)
 
     private fun savePluginEnabled(pluginId: String, enabled: Boolean, error: Throwable? = null) {
         val editor = pluginsController.preferences.edit()
