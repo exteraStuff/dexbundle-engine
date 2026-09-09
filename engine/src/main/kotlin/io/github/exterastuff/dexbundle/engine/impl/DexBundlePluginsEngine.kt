@@ -290,9 +290,30 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         callback: Utilities.Callback<String>?
     ) {
         info("delete plugin '$pluginId'")
-        callback?.run(pluginId)
-    }
 
+        // disable plugin at first
+        setPluginEnabled(pluginId, false) {}
+
+        // remove plugin file
+        try {
+            pluginFile(pluginId)
+                .takeIf(File::exists)
+                ?.let(File::delete)
+        } catch (e: Throwable) {
+            callback?.run(e.toString())
+
+            // As we are unable to delete plugin there are no reason to remove it from plugins list,
+            // because it will be loaded after next engine load.
+            return
+        }
+
+        // remove plugin from list
+        pluginsController.plugins.remove(pluginId)
+        pluginsController.notifyPluginsChanged()
+
+        // notify
+        callback?.run(null)
+    }
 
     override fun getPluginPath(id: String): String =
         pluginFile(id).absolutePath
