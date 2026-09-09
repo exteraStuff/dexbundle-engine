@@ -1,5 +1,5 @@
 [project]
-name = "dex-engine"
+name = "dexbundle-engine"
 version = "0.1.0"
 description = "extera/Ayu-Gram template plugin"
 license = "MIT"

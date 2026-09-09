@@ -20,7 +20,7 @@ import com.exteragram.messenger.plugins.ui.components.InstallPluginBottomSheet.P
 import com.exteragram.messenger.utils.text.LocaleUtils
 import io.github.exterastuff.dexbundle.engine.compat.ExteraConfigCompat
 import io.github.exterastuff.dexbundle.engine.eject.EjectNotifier
-import io.github.exteraStuff.dexbundle.engine.i18n.Strings
+import io.github.exterastuff.dexbundle.engine.i18n.Strings
 import io.github.exterastuff.dexbundle.engine.impl.DexBundlePluginsEngine
 import io.github.exterastuff.dexbundle.engine.util.runOnMainThread
 import org.telegram.messenger.AndroidUtilities

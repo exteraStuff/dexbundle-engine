@@ -16,7 +16,7 @@ from java.nio import ByteBuffer
 from org.telegram.messenger import ApplicationLoader
 
 __id__ = "dexbundle-engine"
-__name__ = "DEX Engine"
+__name__ = "DexBundle Engine"
 __description__ = "PoC движка плагинов принимающего на вход JAR с DEX и META-INF внутри"
 __author__ = "@n08i40k_extera_dev"
 __version__ = "0.0.0"

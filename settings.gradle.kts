@@ -37,7 +37,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "DEX Bundle"
+rootProject.name = "DexBundle Engine"
 
 include(":engine")
 include(":api")

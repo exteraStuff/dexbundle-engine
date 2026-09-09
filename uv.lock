@@ -102,7 +102,7 @@ wheels = [
 ]
 
 [[package]]
-name = "dex-engine"
+name = "dexbundle-engine"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

@@ -26,7 +26,7 @@ plugins {
 }
 
 i18n4k {
-    packageName = "io.github.exteraStuff.dexbundle.engine.i18n"
+    packageName = "io.github.exterastuff.dexbundle.engine.i18n"
     sourceCodeLocales = listOf("en", "ru")
 }
 
