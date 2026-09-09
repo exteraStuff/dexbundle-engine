@@ -293,10 +293,9 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         callback?.run(pluginId)
     }
 
-    override fun getPluginPath(id: String): String {
-        info("get plugin '$id' path")
-        return "/sdcard/123.py"
-    }
+
+    override fun getPluginPath(id: String): String =
+        pluginFile(id).absolutePath
 
     override fun canOpenInExternalApp(): Boolean =
         false
