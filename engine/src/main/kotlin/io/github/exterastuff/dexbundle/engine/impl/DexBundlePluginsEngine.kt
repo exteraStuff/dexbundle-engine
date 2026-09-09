@@ -106,6 +106,7 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         get() = pluginsController.plugins.values
             .filter { it.getEngine() == ID }
 
+    @Throws(Throwable::class)
     @Synchronized
     fun loadPlugin(id: String) {
         if (activePlugins.containsKey(id))
@@ -167,6 +168,7 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         activePlugins[id] = ActivePlugin(id, classLoader, plugin)
     }
 
+    @Throws(Throwable::class)
     @Synchronized
     fun unloadPlugin(id: String) {
         val activePlugin = activePlugins.remove(id)
@@ -193,6 +195,7 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
     override fun isEngineAvailable(): Boolean =
         true
 
+    @Synchronized
     override fun init(callback: Runnable) {
         info("init")
 
@@ -238,6 +241,7 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         }
     }
 
+    @Synchronized
     override fun shutdown(callback: Runnable) {
         info("shutdown")
 
@@ -279,6 +283,7 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
             }
     }
 
+    @Synchronized
     override fun setPluginEnabled(
         pluginId: String,
         enabled: Boolean,
@@ -309,6 +314,7 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         }
     }
 
+    @Synchronized
     override fun deletePlugin(
         pluginId: String,
         callback: Utilities.Callback<String>?
