@@ -99,7 +99,7 @@ class PluginInstallBottomSheet(
     private val button = ButtonWithCounterView(context, true, resourcesProvider).apply {
         setRound()
         setText(installButtonText(), false)
-        setSubText(if (signature.blocksInstall) Strings.signatureMismatch() else null, false)
+        setSubText(blockReasonText(), false)
         isEnabled = !signature.blocksInstall
         setOnClickListener { onInstallClick() }
     }
@@ -292,6 +292,7 @@ class PluginInstallBottomSheet(
                 PluginSignatureState.UNTRUSTED -> R.drawable.msg_mini_lock3
                 PluginSignatureState.MISSING -> R.drawable.unknown_mini
                 PluginSignatureState.EXPIRED,
+                PluginSignatureState.REVOKED,
                 PluginSignatureState.MISMATCH -> R.drawable.warning_sign
             },
             text = signatureChipText(),
@@ -310,6 +311,7 @@ class PluginInstallBottomSheet(
                     PluginSignatureState.UNTRUSTED -> Strings.signatureUntrustedInfo()
                     PluginSignatureState.MISSING -> Strings.signatureMissingInfo()
                     PluginSignatureState.EXPIRED -> Strings.signatureExpiredInfo()
+                    PluginSignatureState.REVOKED -> Strings.signatureRevokedInfo()
                     PluginSignatureState.MISMATCH -> Strings.signatureMismatchInfo()
                 }
             )
@@ -319,12 +321,20 @@ class PluginInstallBottomSheet(
         return chip
     }
 
+    private fun blockReasonText(): String? =
+        when (signature) {
+            PluginSignatureState.REVOKED -> Strings.signatureRevoked()
+            PluginSignatureState.MISMATCH -> Strings.signatureMismatch()
+            else -> null
+        }
+
     private fun signatureChipText(): String {
         val state = when (signature) {
             PluginSignatureState.TRUSTED -> Strings.signatureTrusted()
             PluginSignatureState.UNTRUSTED -> Strings.signatureUntrusted()
             PluginSignatureState.MISSING -> Strings.signatureMissing()
             PluginSignatureState.EXPIRED -> Strings.signatureExpired()
+            PluginSignatureState.REVOKED -> Strings.signatureRevoked()
             PluginSignatureState.MISMATCH -> Strings.signatureMismatch()
         }
 

@@ -2,6 +2,7 @@ package io.github.exterastuff.dexbundle.engine.impl
 
 import java.security.MessageDigest
 import java.security.cert.X509Certificate
+import java.time.Instant
 import java.util.Date
 import java.util.jar.JarEntry
 import java.util.jar.JarFile
@@ -9,9 +10,6 @@ import javax.security.auth.x500.X500Principal
 
 data class SignerInfo(
     val fingerprint: String,
-
-    val isExpired: Boolean,
-    val isRevoked: Boolean,
 
     val signedAt: Date?,
 
@@ -37,8 +35,18 @@ data class SignerInfo(
          * SHA-256 отпечатки сертификатов, подпись которыми считается доверенной.
          * Блять, я слишком плохо знаю английский, чтобы такое сформулировать именно на нём.
          */
+        // TODO: fetch from remote config
         private val TRUSTED_FINGERPRINTS = setOf(
+            "551895F5E515D5326F7D3761A4F61BCF924B4367EC7BB22BFED01793625A8663"
+        )
+
+        /**
+         * SHA-256 отпечатки сертификатов, которые были отозваны.
+         */
+        // TODO: fetch from remote config
+        private val REVOKED_FINGERPRINTS = hashMapOf(
             "E61594D19F9F3B2C7FD3E7ECBB92DC80D0435E32CE7D8D1D79D273F0DAC57E51"
+                    to Date.from(Instant.ofEpochMilli(0))
         )
 
         private fun JarEntry.isSignatureRelated(): Boolean {
@@ -100,8 +108,6 @@ data class SignerInfo(
                     signers.getOrPut(fp) {
                         SignerInfo(
                             fingerprint = fp,
-                            isExpired = chain.first().notAfter < Date(),
-                            isRevoked = false,
                             signedAt = ts?.timestamp,
                             chain = chain,
                             tsaChain = ts
@@ -124,7 +130,20 @@ data class SignerInfo(
     val issuer: String
         get() = leaf.issuerX500Principal.let { it.commonName() ?: it.name }
 
+    val isExpired: Boolean get() =
+        Date() < leaf.notBefore || Date() > leaf.notAfter
+
     val isTrusted: Boolean get() = fingerprint in TRUSTED_FINGERPRINTS
+
+    val isRevoked: Boolean
+        get() {
+            val fromDate = REVOKED_FINGERPRINTS[fingerprint]
+                ?: return false
+
+            return signedAt
+                ?.let { it >= fromDate }
+                ?: true
+        }
 
     /** Plugin was signed before certificate expiration. */
     val isTsaValid: Boolean

@@ -19,10 +19,13 @@ enum class PluginSignatureState {
      * */
     EXPIRED,
 
+    /** Certificate was revoked. */
+    REVOKED,
+
     /** Signature differences from signature of installed plugin version. */
     MISMATCH;
 
-    val blocksInstall: Boolean get() = this == MISMATCH
+    val blocksInstall: Boolean get() = this == MISMATCH || this == REVOKED
 
     companion object {
         /**
@@ -41,6 +44,9 @@ enum class PluginSignatureState {
 
             if (signers.isNullOrEmpty())
                 return MISSING
+
+            if (signers.values.any(SignerInfo::isRevoked))
+                return REVOKED
 
             if (signers.values.any { !it.isValid })
                 return EXPIRED
