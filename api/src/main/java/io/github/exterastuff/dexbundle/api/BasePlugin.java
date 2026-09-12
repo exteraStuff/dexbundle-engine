@@ -2,23 +2,23 @@ package io.github.exterastuff.dexbundle.api;
 
 public abstract class BasePlugin {
     /**
-     * To prevent accidental invocation of the BasePlugin::load method.
+     * Защита от случайного вызова метода BasePlugin::load.
      * <p>
-     * As plugin engine calls this method only once per plugin instance, check with this flag can
-     * fail only when plugin calls this method by itself.
+     * Движок вызывает этот метод ровно один раз на инстанс плагина, поэтому проверка по флагу
+     * срабатывает только тогда, когда плагин вызвал метод сам.
      */
     private volatile boolean WAS_LOADED = false;
 
     /**
-     * To prevent the BasePlugin::unload method from being called twice.
+     * Защита от повторного вызова метода BasePlugin::unload.
      * <p>
-     * As plugin engine calls this method only once per plugin instance, check with this flag can
-     * fail only when plugin calls this method by itself.
+     * Движок вызывает этот метод ровно один раз на инстанс плагина, поэтому проверка по флагу
+     * срабатывает только тогда, когда плагин вызвал метод сам.
      */
     private volatile boolean WAS_UNLOADED = false;
 
     protected PluginContext context;
-    protected Logger logger;
+    protected PluginLogger logger;
 
     public final void load(PluginContext context) {
         if (WAS_LOADED)
@@ -44,10 +44,23 @@ public abstract class BasePlugin {
 
         WAS_UNLOADED = true;
 
-        onUnload();
+        try {
+            onUnload();
+        } finally {
+            this.context = null;
+            this.logger = null;
+        }
+    }
 
-        this.context = null;
-        this.logger = null;
+    /**
+     * Вызывается самим движком плагинов перед выгрузкой плагина, от которого зависит текущий.
+     * <p>
+     * Текущий плагин обязан отпустить всё, что он получил от выгружаемого: сервисы этого плагина
+     * пропадают вместе с ним.
+     *
+     * @param pluginId идентификатор выгружаемого плагина
+     */
+    public void onDependencyUnload(String pluginId) {
     }
 
     protected abstract void onLoad();

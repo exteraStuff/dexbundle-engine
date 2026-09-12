@@ -10,9 +10,7 @@ import javax.security.auth.x500.X500Principal
 
 data class SignerInfo(
     val fingerprint: String,
-
     val signedAt: Date?,
-
     val chain: List<X509Certificate>,
     val tsaChain: List<X509Certificate>,
 ) {
@@ -23,7 +21,7 @@ data class SignerInfo(
 
         private val ESCAPED_CHAR_REGEX = Regex("""\\(.)""")
 
-        /** CN in dName. */
+        /** CN из dName. */
         private fun X500Principal.commonName(): String? =
             CN_REGEX.find(name)
                 ?.groupValues
@@ -32,89 +30,76 @@ data class SignerInfo(
                 ?.takeIf(String::isNotBlank)
 
         /**
-         * SHA-256 отпечатки сертификатов, подпись которыми считается доверенной.
-         * Блять, я слишком плохо знаю английский, чтобы такое сформулировать именно на нём.
+         * SHA-256 отпечатки сертификатов, подпись которыми считается доверенной. Блять, я слишком
+         * плохо знаю английский, чтобы такое сформулировать именно на нём.
          */
-        // TODO: fetch from remote config
-        private val TRUSTED_FINGERPRINTS = setOf(
-            "551895F5E515D5326F7D3761A4F61BCF924B4367EC7BB22BFED01793625A8663"
-        )
+        // TODO: брать из remote config
+        private val TRUSTED_FINGERPRINTS =
+            setOf("551895F5E515D5326F7D3761A4F61BCF924B4367EC7BB22BFED01793625A8663")
 
-        /**
-         * SHA-256 отпечатки сертификатов, которые были отозваны.
-         */
-        // TODO: fetch from remote config
-        private val REVOKED_FINGERPRINTS = hashMapOf(
-            "E61594D19F9F3B2C7FD3E7ECBB92DC80D0435E32CE7D8D1D79D273F0DAC57E51"
-                    to Date.from(Instant.ofEpochMilli(0))
-        )
+        /** SHA-256 отпечатки сертификатов, которые были отозваны. */
+        // TODO: брать из remote config
+        private val REVOKED_FINGERPRINTS =
+            hashMapOf(
+                "E61594D19F9F3B2C7FD3E7ECBB92DC80D0435E32CE7D8D1D79D273F0DAC57E51" to
+                    Date.from(Instant.ofEpochMilli(0))
+            )
 
         private fun JarEntry.isSignatureRelated(): Boolean {
             val n = name.uppercase()
 
-            if (!n.startsWith("META-INF/"))
-                return false
+            if (!n.startsWith("META-INF/")) return false
 
             val tail = n.removePrefix("META-INF/")
 
-            // forbid nesting
-            if (tail.contains('/'))
-                return false
+            // вложенность запрещена
+            if (tail.contains('/')) return false
 
-            return tail == "MANIFEST.MF"
-                    || tail.startsWith("SIG-")
-                    || SIG_SUFFIXES.any(tail::endsWith)
+            return tail == "MANIFEST.MF" ||
+                tail.startsWith("SIG-") ||
+                SIG_SUFFIXES.any(tail::endsWith)
         }
 
         fun of(jar: JarFile): LinkedHashMap<String, SignerInfo>? {
             val entries = jar.entries().toList()
 
             val hasSignatureBlock = entries.any { e ->
-                e.isSignatureRelated() && SIG_SUFFIXES
-                    .any { e.name.uppercase().endsWith(it) }
+                e.isSignatureRelated() && SIG_SUFFIXES.any { e.name.uppercase().endsWith(it) }
             }
 
-            if (!hasSignatureBlock)
-                return null
+            if (!hasSignatureBlock) return null
 
             val buf = ByteArray(16 * 1024)
             val signers = LinkedHashMap<String, SignerInfo>()
             var payloadEntries = 0
 
             for (e in entries) {
-                jar.getInputStream(e)
-                    .use { ins -> while (ins.read(buf) != -1) continue }
+                jar.getInputStream(e).use { ins -> while (ins.read(buf) != -1) continue }
 
-                if (e.isDirectory || e.isSignatureRelated())
-                    continue
+                if (e.isDirectory || e.isSignatureRelated()) continue
 
                 payloadEntries++
 
-                val cs = e.codeSigners
-                    ?: throw SecurityException("Unsigned entry ${e.name}")
+                val cs = e.codeSigners ?: throw SecurityException("Unsigned entry ${e.name}")
 
                 for (signer in cs) {
-                    val chain = signer
-                        .signerCertPath
-                        .certificates
-                        .map { it as X509Certificate }
+                    val chain = signer.signerCertPath.certificates.map { it as X509Certificate }
 
                     val ts = signer.timestamp
 
-                    val fp = MessageDigest.getInstance("SHA-256")
-                        .digest(chain.first().encoded)
-                        .joinToString("") { "%02X".format(it) }
+                    val fp =
+                        MessageDigest.getInstance("SHA-256")
+                            .digest(chain.first().encoded)
+                            .joinToString("") { "%02X".format(it) }
 
                     signers.getOrPut(fp) {
                         SignerInfo(
                             fingerprint = fp,
                             signedAt = ts?.timestamp,
                             chain = chain,
-                            tsaChain = ts
-                                ?.signerCertPath
-                                ?.certificates
-                                ?.map { it as X509Certificate }
-                                ?: emptyList()
+                            tsaChain =
+                                ts?.signerCertPath?.certificates?.map { it as X509Certificate }
+                                    ?: emptyList(),
                         )
                     }
                 }
@@ -124,36 +109,33 @@ data class SignerInfo(
         }
     }
 
-    val leaf: X509Certificate get() = chain.first()
+    val leaf: X509Certificate
+        get() = chain.first()
 
-    /** Who issued the signing certificate. */
+    /** Кто выдал сертификат подписи. */
     val issuer: String
         get() = leaf.issuerX500Principal.let { it.commonName() ?: it.name }
 
-    val isExpired: Boolean get() =
-        Date() < leaf.notBefore || Date() > leaf.notAfter
+    val isExpired: Boolean
+        get() = Date() < leaf.notBefore || Date() > leaf.notAfter
 
-    val isTrusted: Boolean get() = fingerprint in TRUSTED_FINGERPRINTS
+    val isTrusted: Boolean
+        get() = fingerprint in TRUSTED_FINGERPRINTS
 
     val isRevoked: Boolean
         get() {
-            val fromDate = REVOKED_FINGERPRINTS[fingerprint]
-                ?: return false
+            val fromDate = REVOKED_FINGERPRINTS[fingerprint] ?: return false
 
-            return signedAt
-                ?.let { it >= fromDate }
-                ?: true
+            return signedAt?.let { it >= fromDate } ?: true
         }
 
-    /** Plugin was signed before certificate expiration. */
+    /** Плагин подписан до того, как сертификат истёк. */
     val isTsaValid: Boolean
-        get() = signedAt
-            ?.let { it >= leaf.notBefore && it <= leaf.notAfter }
-            ?: false
+        get() = signedAt?.let { it >= leaf.notBefore && it <= leaf.notAfter } ?: false
 
     /**
-     * Certificate isn't revoked, expired or TSA can guarantee that
-     * plugin was signed before expiration.
+     * Сертификат не отозван и не истёк, либо TSA подтверждает, что плагин подписали до истечения.
      */
-    val isValid: Boolean get() = !isRevoked && (!isExpired || isTsaValid)
+    val isValid: Boolean
+        get() = !isRevoked && (!isExpired || isTsaValid)
 }

@@ -4,6 +4,7 @@ plugins {
 }
 
 group = "io.github.exterastuff.dexbundle"
+
 version = "0.1.0"
 
 java {

@@ -2,35 +2,33 @@ package io.github.exterastuff.dexbundle.engine.ui
 
 import io.github.exterastuff.dexbundle.engine.impl.SignerInfo
 
-/** Plugin signature state. */
+/** Состояние подписи плагина. */
 enum class PluginSignatureState {
-    /** Plugin isn't signed. */
+    /** Плагин не подписан. */
     MISSING,
 
-    /** Plugin has signature, but certificate isn't trusted. */
+    /** Плагин подписан, но сертификат не доверенный. */
     UNTRUSTED,
 
-    /** Plugin signed with trusted certificate. */
+    /** Плагин подписан доверенным сертификатом. */
     TRUSTED,
 
-    /**
-     * Certificate was expired and TSA can't guarantee
-     * what plugin was signed before expiration.
-     * */
+    /** Сертификат истёк, и TSA не подтверждает, что плагин подписали до истечения. */
     EXPIRED,
 
-    /** Certificate was revoked. */
+    /** Сертификат отозван. */
     REVOKED,
 
-    /** Signature differences from signature of installed plugin version. */
+    /** Подпись отличается от подписи установленной версии плагина. */
     MISMATCH;
 
-    val blocksInstall: Boolean get() = this == MISMATCH || this == REVOKED
+    val blocksInstall: Boolean
+        get() = this == MISMATCH || this == REVOKED
 
     companion object {
         /**
-         * @param signers signatures of plugin version that needs to be installed
-         * @param installedSigners signatures of already installed plugin version
+         * @param signers подписи версии плагина, которую нужно установить
+         * @param installedSigners подписи уже установленной версии плагина
          */
         fun of(
             signers: Map<String, SignerInfo>?,
@@ -39,20 +37,15 @@ enum class PluginSignatureState {
             val installedFingerprints = installedSigners?.keys.orEmpty()
             val fingerprints = signers?.keys.orEmpty()
 
-            if (!fingerprints.containsAll(installedFingerprints))
-                return MISMATCH
+            if (!fingerprints.containsAll(installedFingerprints)) return MISMATCH
 
-            if (signers.isNullOrEmpty())
-                return MISSING
+            if (signers.isNullOrEmpty()) return MISSING
 
-            if (signers.values.any(SignerInfo::isRevoked))
-                return REVOKED
+            if (signers.values.any(SignerInfo::isRevoked)) return REVOKED
 
-            if (signers.values.any { !it.isValid })
-                return EXPIRED
+            if (signers.values.any { !it.isValid }) return EXPIRED
 
-            if (signers.values.any(SignerInfo::isTrusted))
-                return TRUSTED
+            if (signers.values.any(SignerInfo::isTrusted)) return TRUSTED
 
             return UNTRUSTED
         }

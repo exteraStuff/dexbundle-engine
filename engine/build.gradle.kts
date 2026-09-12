@@ -1,7 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-val minSdkMajorProperty: Provider<Int> =
-    providers.gradleProperty("minSdkMajor").map { it.toInt() }
+val minSdkMajorProperty: Provider<Int> = providers.gradleProperty("minSdkMajor").map { it.toInt() }
 
 val targetSdkMajorProperty: Provider<Int> =
     providers.gradleProperty("targetSdkMajor").map { it.toInt() }
@@ -38,9 +37,10 @@ android {
     }
 
     compileSdk {
-        version = release(targetSdkMajorProperty.get()) {
-            minorApiLevel = targetSdkMinorProperty.get()
-        }
+        version =
+            release(targetSdkMajorProperty.get()) {
+                minorApiLevel = targetSdkMinorProperty.get()
+            }
     }
 
     defaultConfig {

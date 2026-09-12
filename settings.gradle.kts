@@ -40,4 +40,5 @@ dependencyResolutionManagement {
 rootProject.name = "DexBundle Engine"
 
 include(":engine")
+
 include(":api")

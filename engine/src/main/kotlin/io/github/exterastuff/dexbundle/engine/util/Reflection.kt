@@ -1,4 +1,5 @@
 @file:Suppress("Unused")
+
 package io.github.exterastuff.dexbundle.engine.util
 
 import java.lang.reflect.Field
@@ -22,14 +23,15 @@ fun getAccessibleFields(klass: Class<*>): Set<Field> {
 
     return fields
 }
+
 fun cloneFields(
     src: Any,
     dest: Any,
-    // can be got by calling getAccessibleFields
-    fields: Collection<Field>
+    // можно получить через getAccessibleFields
+    fields: Collection<Field>,
 ) {
     for (field in fields) {
-       field.set(dest, field.get(src))
+        field.set(dest, field.get(src))
     }
 }
 
@@ -40,12 +42,8 @@ fun getField(klass: Class<*>, name: String): Field {
     return field
 }
 
-inline fun <reified T> Field.getAs(obj: Any?): T? =
-    this.get(obj) as? T
+inline fun <reified T> Field.getAs(obj: Any?): T? = this.get(obj) as? T
 
-inline fun <reified T> Field.getAsUnchecked(obj: Any?): T =
-    this.get(obj) as T
+inline fun <reified T> Field.getAsUnchecked(obj: Any?): T = this.get(obj) as T
 
-fun Field.addInt(obj: Any?, value: Int) =
-    set(obj, getAs<Int>(obj)!! + value)
-
+fun Field.addInt(obj: Any?, value: Int) = set(obj, getAs<Int>(obj)!! + value)

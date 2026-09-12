@@ -44,39 +44,37 @@ import org.telegram.ui.Stories.recorder.HintView2
 
 class PluginInstallBottomSheet(
     private val fragment: BaseFragment,
+    private val engine: DexBundlePluginsEngine,
     private val plugin: Plugin,
     private val params: PluginInstallParams,
     private val signature: PluginSignatureState,
     signers: Map<String, SignerInfo>?,
-) : BottomSheet(fragment.parentActivity, false, fragment.resourceProvider),
-    EjectNotifier.Delegate {
+) : BottomSheet(fragment.parentActivity, false, fragment.resourceProvider), EjectNotifier.Delegate {
 
     companion object {
         private const val ICON_SIZE = 78
 
         private const val HINT_DIRECTION = 3
 
-        private const val HINT_SHOWN_TRUSTED_KEY =
-            "dexengine_plugin_source_hint_trusted"
+        private const val HINT_SHOWN_TRUSTED_KEY = "dexengine_plugin_source_hint_trusted"
 
-        private const val HINT_SHOWN_UNKNOWN_KEY =
-            "dexengine_plugin_source_hint_unknown"
+        private const val HINT_SHOWN_UNKNOWN_KEY = "dexengine_plugin_source_hint_unknown"
 
         fun show(
             fragment: BaseFragment,
+            engine: DexBundlePluginsEngine,
             plugin: Plugin,
             params: PluginInstallParams,
             signature: PluginSignatureState,
             signers: Map<String, SignerInfo>?,
         ) = runOnMainThread {
-            PluginInstallBottomSheet(fragment, plugin, params, signature, signers).show()
+            PluginInstallBottomSheet(fragment, engine, plugin, params, signature, signers).show()
         }
     }
 
     private val unsubscribeFromEject = EjectNotifier.subscribe(this)
 
-    private val installedPlugin = PluginsController.getInstance()
-        .plugins[plugin.getId()]
+    private val installedPlugin = PluginsController.getInstance().plugins[plugin.getId()]
 
     private val isUpdate = installedPlugin != null
 
@@ -90,32 +88,32 @@ class PluginInstallBottomSheet(
 
     private lateinit var signatureChip: View
 
-    private val issuers = signers
-        ?.values
-        ?.map(SignerInfo::issuer)
-        ?.distinct()
-        .orEmpty()
+    private val issuers = signers?.values?.map(SignerInfo::issuer)?.distinct().orEmpty()
 
-    private val button = ButtonWithCounterView(context, true, resourcesProvider).apply {
-        setRound()
-        setText(installButtonText(), false)
-        setSubText(blockReasonText(), false)
-        isEnabled = !signature.blocksInstall
-        setOnClickListener { onInstallClick() }
-    }
+    private val button =
+        ButtonWithCounterView(context, true, resourcesProvider).apply {
+            setRound()
+            setText(installButtonText(), false)
+            setSubText(blockReasonText(), false)
+            isEnabled = !signature.blocksInstall
+            setOnClickListener { onInstallClick() }
+        }
 
     init {
-        setDelegate(object : BottomSheetDelegate() {
-            override fun canDismiss(): Boolean = !installing
-        })
+        setDelegate(
+            object : BottomSheetDelegate() {
+                override fun canDismiss(): Boolean = !installing
+            }
+        )
 
         fixNavigationBar()
 
-        val content = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            clipChildren = false
-            clipToPadding = false
-        }
+        val content =
+            LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                clipChildren = false
+                clipToPadding = false
+            }
 
         content.addView(
             createIcon(),
@@ -126,21 +124,21 @@ class PluginInstallBottomSheet(
                 0f,
                 28f,
                 0f,
-                0f
-            )
+                0f,
+            ),
         )
 
         content.addView(
             createTitle(),
-            LayoutHelper.createLinear(MATCH_PARENT, WRAP_CONTENT, 0, 40f, 16f, 40f, 0f)
+            LayoutHelper.createLinear(MATCH_PARENT, WRAP_CONTENT, 0, 40f, 16f, 40f, 0f),
         )
 
         content.addView(
             createSubtitle(),
-            LayoutHelper.createLinear(MATCH_PARENT, WRAP_CONTENT, 0, 21f, 4f, 21f, 0f)
+            LayoutHelper.createLinear(MATCH_PARENT, WRAP_CONTENT, 0, 21f, 4f, 21f, 0f),
         )
 
-        // trusted signature makes the source irrelevant
+        // при доверенной подписи источник уже не важен
         if (signature != PluginSignatureState.TRUSTED)
             content.addView(
                 createSourceChip(),
@@ -151,8 +149,8 @@ class PluginInstallBottomSheet(
                     0f,
                     12f,
                     0f,
-                    0f
-                )
+                    0f,
+                ),
             )
 
         content.addView(
@@ -164,13 +162,13 @@ class PluginInstallBottomSheet(
                 21f,
                 if (sourceChip == null) 12f else 6f,
                 21f,
-                0f
-            )
+                0f,
+            ),
         )
 
         content.addView(
             createDescription(),
-            LayoutHelper.createLinear(MATCH_PARENT, WRAP_CONTENT, 0, 21f, 28f, 21f, 0f)
+            LayoutHelper.createLinear(MATCH_PARENT, WRAP_CONTENT, 0, 21f, 28f, 21f, 0f),
         )
 
         content.addView(button, LayoutHelper.createLinear(MATCH_PARENT, 48, 0, 16f, 28f, 16f, 16f))
@@ -185,32 +183,29 @@ class PluginInstallBottomSheet(
                     0f,
                     0f,
                     0f,
-                    8f
-                )
+                    8f,
+                ),
             )
 
         setCustomView(ScrollView(context).apply { addView(content) })
 
-        AndroidUtilities.runOnUIThread({
-            if (signature.blocksInstall)
-                signatureChip.performClick()
-            else if (!wasSourceHintShown())
-                sourceChip?.performClick()
-        }, 600)
+        AndroidUtilities.runOnUIThread(
+            {
+                if (signature.blocksInstall) signatureChip.performClick()
+                else if (!wasSourceHintShown()) sourceChip?.performClick()
+            },
+            600,
+        )
     }
 
     private fun installButtonText(): String =
-        if (isUpdate)
-            Strings.updatePlugin()
-        else
-            Strings.installPlugin()
+        if (isUpdate) Strings.updatePlugin() else Strings.installPlugin()
 
     private fun createIcon(): View {
         val pack = plugin.getPack()
         val index = plugin.getIndex()
 
-        if (pack == null || index < 0)
-            return createDefaultIcon()
+        if (pack == null || index < 0) return createDefaultIcon()
 
         return BackupImageView(context).apply {
             imageReceiver.autoRepeat = 1
@@ -224,14 +219,16 @@ class PluginInstallBottomSheet(
         ImageView(context).apply {
             scaleType = ImageView.ScaleType.FIT_CENTER
             setImageResource(R.drawable.plugins_filled)
-            colorFilter = PorterDuffColorFilter(
-                getThemedColor(Theme.key_featuredStickers_buttonText),
-                PorterDuff.Mode.SRC_IN
-            )
-            background = Theme.createCircleDrawable(
-                dp(ICON_SIZE.toFloat()),
-                getThemedColor(Theme.key_featuredStickers_addButton)
-            )
+            colorFilter =
+                PorterDuffColorFilter(
+                    getThemedColor(Theme.key_featuredStickers_buttonText),
+                    PorterDuff.Mode.SRC_IN,
+                )
+            background =
+                Theme.createCircleDrawable(
+                    dp(ICON_SIZE.toFloat()),
+                    getThemedColor(Theme.key_featuredStickers_addButton),
+                )
 
             val padding = dp(16f)
             setPadding(padding, padding, padding, padding)
@@ -255,67 +252,77 @@ class PluginInstallBottomSheet(
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteGrayText))
 
-            val subtitle = SpannableStringBuilder(Strings.pluginVersion())
-                .append(' ')
-                .append(plugin.getVersion())
-                .append(" • ")
-                .append(LocaleUtils.formatWithUsernames(plugin.getAuthor(), fragment) { dismiss() })
+            val subtitle =
+                SpannableStringBuilder(Strings.pluginVersion())
+                    .append(' ')
+                    .append(plugin.getVersion())
+                    .append(" • ")
+                    .append(
+                        LocaleUtils.formatWithUsernames(plugin.getAuthor(), fragment) { dismiss() }
+                    )
 
             text = subtitle
         }
 
     private fun createSourceChip(): View {
-        val chip = createChip(
-            iconRes = if (params.trusted) R.drawable.trusted_mini else R.drawable.unknown_mini,
-            text = if (params.trusted) Strings.sourceTrusted() else Strings.sourceUnknown(),
-            color = getThemedColor(
-                if (params.trusted) Theme.key_windowBackgroundWhiteGreenText
-                else Theme.key_text_RedRegular
-            )
-        ) { anchor ->
-            showHint(
-                anchor,
-                if (params.trusted) Strings.sourceTrustedInfo() else Strings.sourceUnknownInfo()
-            )
+        val chip =
+            createChip(
+                iconRes = if (params.trusted) R.drawable.trusted_mini else R.drawable.unknown_mini,
+                text = if (params.trusted) Strings.sourceTrusted() else Strings.sourceUnknown(),
+                color =
+                    getThemedColor(
+                        if (params.trusted) Theme.key_windowBackgroundWhiteGreenText
+                        else Theme.key_text_RedRegular
+                    ),
+            ) { anchor ->
+                showHint(
+                    anchor,
+                    if (params.trusted) Strings.sourceTrustedInfo()
+                    else Strings.sourceUnknownInfo(),
+                )
 
-            markSourceHintShown()
-        }
+                markSourceHintShown()
+            }
 
         sourceChip = chip
         return chip
     }
 
     private fun createSignatureChip(): View {
-        val chip = createChip(
-            iconRes = when (signature) {
-                PluginSignatureState.TRUSTED -> R.drawable.trusted_mini
-                PluginSignatureState.UNTRUSTED -> R.drawable.msg_mini_lock3
-                PluginSignatureState.MISSING -> R.drawable.unknown_mini
-                PluginSignatureState.EXPIRED,
-                PluginSignatureState.REVOKED,
-                PluginSignatureState.MISMATCH -> R.drawable.warning_sign
-            },
-            text = signatureChipText(),
-            color = getThemedColor(
-                when (signature) {
-                    PluginSignatureState.TRUSTED -> Theme.key_windowBackgroundWhiteGreenText
-                    PluginSignatureState.UNTRUSTED -> Theme.key_windowBackgroundWhiteGrayText
-                    else -> Theme.key_text_RedRegular
-                }
-            )
-        ) { anchor ->
-            showHint(
-                anchor,
-                when (signature) {
-                    PluginSignatureState.TRUSTED -> Strings.signatureTrustedInfo()
-                    PluginSignatureState.UNTRUSTED -> Strings.signatureUntrustedInfo()
-                    PluginSignatureState.MISSING -> Strings.signatureMissingInfo()
-                    PluginSignatureState.EXPIRED -> Strings.signatureExpiredInfo()
-                    PluginSignatureState.REVOKED -> Strings.signatureRevokedInfo()
-                    PluginSignatureState.MISMATCH -> Strings.signatureMismatchInfo()
-                }
-            )
-        }
+        val chip =
+            createChip(
+                iconRes =
+                    when (signature) {
+                        PluginSignatureState.TRUSTED -> R.drawable.trusted_mini
+                        PluginSignatureState.UNTRUSTED -> R.drawable.msg_mini_lock3
+                        PluginSignatureState.MISSING -> R.drawable.unknown_mini
+                        PluginSignatureState.EXPIRED,
+                        PluginSignatureState.REVOKED,
+                        PluginSignatureState.MISMATCH -> R.drawable.warning_sign
+                    },
+                text = signatureChipText(),
+                color =
+                    getThemedColor(
+                        when (signature) {
+                            PluginSignatureState.TRUSTED -> Theme.key_windowBackgroundWhiteGreenText
+                            PluginSignatureState.UNTRUSTED ->
+                                Theme.key_windowBackgroundWhiteGrayText
+                            else -> Theme.key_text_RedRegular
+                        }
+                    ),
+            ) { anchor ->
+                showHint(
+                    anchor,
+                    when (signature) {
+                        PluginSignatureState.TRUSTED -> Strings.signatureTrustedInfo()
+                        PluginSignatureState.UNTRUSTED -> Strings.signatureUntrustedInfo()
+                        PluginSignatureState.MISSING -> Strings.signatureMissingInfo()
+                        PluginSignatureState.EXPIRED -> Strings.signatureExpiredInfo()
+                        PluginSignatureState.REVOKED -> Strings.signatureRevokedInfo()
+                        PluginSignatureState.MISMATCH -> Strings.signatureMismatchInfo()
+                    },
+                )
+            }
 
         signatureChip = chip
         return chip
@@ -329,17 +336,17 @@ class PluginInstallBottomSheet(
         }
 
     private fun signatureChipText(): String {
-        val state = when (signature) {
-            PluginSignatureState.TRUSTED -> Strings.signatureTrusted()
-            PluginSignatureState.UNTRUSTED -> Strings.signatureUntrusted()
-            PluginSignatureState.MISSING -> Strings.signatureMissing()
-            PluginSignatureState.EXPIRED -> Strings.signatureExpired()
-            PluginSignatureState.REVOKED -> Strings.signatureRevoked()
-            PluginSignatureState.MISMATCH -> Strings.signatureMismatch()
-        }
+        val state =
+            when (signature) {
+                PluginSignatureState.TRUSTED -> Strings.signatureTrusted()
+                PluginSignatureState.UNTRUSTED -> Strings.signatureUntrusted()
+                PluginSignatureState.MISSING -> Strings.signatureMissing()
+                PluginSignatureState.EXPIRED -> Strings.signatureExpired()
+                PluginSignatureState.REVOKED -> Strings.signatureRevoked()
+                PluginSignatureState.MISMATCH -> Strings.signatureMismatch()
+            }
 
-        if (issuers.isEmpty())
-            return state
+        if (issuers.isEmpty()) return state
 
         return "$state • ${issuers.joinToString(", ")}"
     }
@@ -350,37 +357,39 @@ class PluginInstallBottomSheet(
         color: Int,
         onClick: (anchor: View) -> Unit,
     ): View {
-        val chip = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            background = Theme.createRoundRectDrawable(
-                dp(20f),
-                dp(20f),
-                AndroidUtilities.multiplyAlphaComponent(color, 0.1f)
-            )
-            setPadding(dp(12f), dp(6f), dp(16f), dp(6f))
+        val chip =
+            LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                background =
+                    Theme.createRoundRectDrawable(
+                        dp(20f),
+                        dp(20f),
+                        AndroidUtilities.multiplyAlphaComponent(color, 0.1f),
+                    )
+                setPadding(dp(12f), dp(6f), dp(16f), dp(6f))
 
-            addView(
-                ImageView(context).apply {
-                    setImageResource(iconRes)
-                    colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
-                },
-                LayoutHelper.createLinear(14, 14, Gravity.CENTER_VERTICAL, 0f, 0f, 6f, 0f)
-            )
+                addView(
+                    ImageView(context).apply {
+                        setImageResource(iconRes)
+                        colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
+                    },
+                    LayoutHelper.createLinear(14, 14, Gravity.CENTER_VERTICAL, 0f, 0f, 6f, 0f),
+                )
 
-            addView(
-                TextView(context).apply {
-                    typeface = AndroidUtilities.regular()
-                    setTextColor(color)
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                    maxLines = 1
-                    ellipsize = TextUtils.TruncateAt.END
-                    this.text = text
-                }
-            )
+                addView(
+                    TextView(context).apply {
+                        typeface = AndroidUtilities.regular()
+                        setTextColor(color)
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                        maxLines = 1
+                        ellipsize = TextUtils.TruncateAt.END
+                        this.text = text
+                    }
+                )
 
-            setOnClickListener { onClick(it) }
-        }
+                setOnClickListener { onClick(it) }
+            }
 
         ScaleStateListAnimator.apply(chip, 0.05f, 1.5f)
 
@@ -388,48 +397,50 @@ class PluginInstallBottomSheet(
     }
 
     private fun createEnableAfterInstallationCheckbox(): View {
-        val checkBox = CheckBox2(context, 21, resourcesProvider).apply {
-            setColor(
-                Theme.key_radioBackgroundChecked,
-                Theme.key_checkboxDisabled,
-                Theme.key_checkboxCheck
-            )
-            drawUnchecked = true
-            setChecked(enableAfterInstallation, false)
-            setDrawBackgroundAsArc(10)
-        }
-
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(8f), dp(6f), dp(10f), dp(6f))
-
-            addView(
-                FrameLayout(context).apply {
-                    addView(
-                        checkBox,
-                        LayoutHelper.createFrame(21, 21f, Gravity.CENTER, 0f, 0f, 0f, 0f)
-                    )
-                },
-                LayoutHelper.createLinear(24, 24, Gravity.CENTER_VERTICAL, 0f, 0f, 6f, 0f)
-            )
-
-            addView(
-                TextView(context).apply {
-                    setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlackText))
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                    text = Strings.enableAfterInstallation()
-                },
-                LayoutHelper.createLinear(WRAP_CONTENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL)
-            )
-
-            background =
-                Theme.createRadSelectorDrawable(getThemedColor(Theme.key_listSelector), 8, 8)
-
-            setOnClickListener {
-                checkBox.setChecked(!checkBox.isChecked, true)
-                enableAfterInstallation = checkBox.isChecked
+        val checkBox =
+            CheckBox2(context, 21, resourcesProvider).apply {
+                setColor(
+                    Theme.key_radioBackgroundChecked,
+                    Theme.key_checkboxDisabled,
+                    Theme.key_checkboxCheck,
+                )
+                drawUnchecked = true
+                setChecked(enableAfterInstallation, false)
+                setDrawBackgroundAsArc(10)
             }
-        }
+
+        val row =
+            LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(dp(8f), dp(6f), dp(10f), dp(6f))
+
+                addView(
+                    FrameLayout(context).apply {
+                        addView(
+                            checkBox,
+                            LayoutHelper.createFrame(21, 21f, Gravity.CENTER, 0f, 0f, 0f, 0f),
+                        )
+                    },
+                    LayoutHelper.createLinear(24, 24, Gravity.CENTER_VERTICAL, 0f, 0f, 6f, 0f),
+                )
+
+                addView(
+                    TextView(context).apply {
+                        setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlackText))
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                        text = Strings.enableAfterInstallation()
+                    },
+                    LayoutHelper.createLinear(WRAP_CONTENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL),
+                )
+
+                background =
+                    Theme.createRadSelectorDrawable(getThemedColor(Theme.key_listSelector), 8, 8)
+
+                setOnClickListener {
+                    checkBox.setChecked(!checkBox.isChecked, true)
+                    enableAfterInstallation = checkBox.isChecked
+                }
+            }
 
         ScaleStateListAnimator.apply(row, 0.05f, 1.2f)
 
@@ -448,22 +459,24 @@ class PluginInstallBottomSheet(
         }
 
     private fun wasSourceHintShown(): Boolean =
-        ExteraConfigCompat.getPreferences().getBoolean(
-            if (params.trusted) HINT_SHOWN_TRUSTED_KEY else HINT_SHOWN_UNKNOWN_KEY,
-            false
-        )
+        ExteraConfigCompat.getPreferences()
+            .getBoolean(
+                if (params.trusted) HINT_SHOWN_TRUSTED_KEY else HINT_SHOWN_UNKNOWN_KEY,
+                false,
+            )
 
     private fun showHint(anchor: View, text: CharSequence) {
         currentHint?.hide()
 
-        val hint = HintView2(context, HINT_DIRECTION)
-            .setMultilineText(true)
-            .setBgColor(getThemedColor(Theme.key_undo_background))
-            .setTextColor(getThemedColor(Theme.key_undo_infoColor))
-            .setText(AndroidUtilities.replaceTags(text.toString()))
-            .setTextAlign(Layout.Alignment.ALIGN_CENTER)
-            .allowBlur(true)
-            .setRounding(12f)
+        val hint =
+            HintView2(context, HINT_DIRECTION)
+                .setMultilineText(true)
+                .setBgColor(getThemedColor(Theme.key_undo_background))
+                .setTextColor(getThemedColor(Theme.key_undo_infoColor))
+                .setText(AndroidUtilities.replaceTags(text.toString()))
+                .setTextAlign(Layout.Alignment.ALIGN_CENTER)
+                .allowBlur(true)
+                .setRounding(12f)
 
         hint.setMaxWidthPx(HintView2.cutInFancyHalf(hint.text, hint.textPaint))
 
@@ -476,8 +489,8 @@ class PluginInstallBottomSheet(
                 32f,
                 0f,
                 32f,
-                0f
-            )
+                0f,
+            ),
         )
         currentHint = hint
 
@@ -502,13 +515,12 @@ class PluginInstallBottomSheet(
         ExteraConfigCompat.getEditor()
             .putBoolean(
                 if (params.trusted) HINT_SHOWN_TRUSTED_KEY else HINT_SHOWN_UNKNOWN_KEY,
-                true
+                true,
             )
             .apply()
 
     private fun onInstallClick() {
-        if (installing || signature.blocksInstall)
-            return
+        if (installing || signature.blocksInstall) return
 
         installing = true
         button.isLoading = true
@@ -516,7 +528,7 @@ class PluginInstallBottomSheet(
         setCanDismissWithSwipe(false)
         setCanDismissWithTouchOutside(false)
 
-        DexBundlePluginsEngine.install(params.filePath, plugin) { error ->
+        engine.install(plugin.getId(), params.filePath) { error ->
             runOnMainThread { onInstallFinished(error) }
         }
     }
@@ -535,8 +547,10 @@ class PluginInstallBottomSheet(
                 .createSimpleBulletin(
                     R.raw.error,
                     Strings.installError(plugin.getName()),
-                    LocaleUtils.createCopySpan(fragment)
-                ) { copyToClipboard(error) }
+                    LocaleUtils.createCopySpan(fragment),
+                ) {
+                    copyToClipboard(error)
+                }
                 .show()
 
             return
@@ -546,15 +560,16 @@ class PluginInstallBottomSheet(
 
         if (enableAfterInstallation && !ExteraConfigCompat.isPluginsSafeMode()) {
             PluginsController.getInstance().setPluginEnabled(plugin.getId(), true) { enableError ->
-                if (enableError == null)
-                    showSuccessBulletin()
+                if (enableError == null) showSuccessBulletin()
                 else
                     BulletinFactory.of(fragment)
                         .createSimpleBulletin(
                             R.raw.error,
                             Strings.installedButFailedToEnable(plugin.getName()),
-                            LocaleUtils.createCopySpan(fragment)
-                        ) { copyToClipboard(enableError) }
+                            LocaleUtils.createCopySpan(fragment),
+                        ) {
+                            copyToClipboard(enableError)
+                        }
                         .show()
             }
 
@@ -565,21 +580,15 @@ class PluginInstallBottomSheet(
     }
 
     private fun showSuccessBulletin() {
-        val message = if (isUpdate)
-            Strings.updated(plugin.getName())
-        else
-            Strings.installed(plugin.getName())
+        val message =
+            if (isUpdate) Strings.updated(plugin.getName()) else Strings.installed(plugin.getName())
 
-        BulletinFactory.of(fragment)
-            .createSimpleBulletin(R.raw.contact_check, message)
-            .show()
+        BulletinFactory.of(fragment).createSimpleBulletin(R.raw.contact_check, message).show()
     }
 
     private fun copyToClipboard(text: String) {
         if (AndroidUtilities.addToClipboard(text))
-            BulletinFactory.of(fragment)
-                .createCopyBulletin(Strings.textCopied())
-                .show()
+            BulletinFactory.of(fragment).createCopyBulletin(Strings.textCopied()).show()
     }
 
     override fun onSwipeStarts() {

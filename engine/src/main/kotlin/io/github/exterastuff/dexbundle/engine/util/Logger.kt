@@ -12,21 +12,23 @@ object Logger : EjectNotifier.Delegate {
         EjectNotifier.subscribe(this, priority = 1000)
     }
 
-    // distinguishes log lines of plugin instances loaded from different class loaders
-    private val ID = ThreadLocalRandom.current()
-        .nextInt()
-        .toHexString(HexFormat {
-            upperCase = true
+    // различает строки лога инстансов плагина из разных class-loader'ов
+    private val ID =
+        ThreadLocalRandom.current()
+            .nextInt()
+            .toHexString(
+                HexFormat {
+                    upperCase = true
 
-            number {
-                minLength = 4
-            }
-        })
-        .take(4)
-        .let { "${Plugin.ID}[$it]" }
+                    number {
+                        minLength = 4
+                    }
+                }
+            )
+            .take(4)
+            .let { "${Plugin.ID}[$it]" }
 
-    @Volatile
-    private var suppressFatal = false
+    @Volatile private var suppressFatal = false
 
     fun debug(message: String) {
         Log.d(ID, message)
@@ -44,12 +46,16 @@ object Logger : EjectNotifier.Delegate {
         Log.e(ID, message)
     }
 
+    /** Оставляет [fatal] без последствий: плагин уже выгружается. */
+    internal fun suppressFatal() {
+        suppressFatal = true
+    }
+
     fun fatal(message: String, exception: Throwable, preventEject: Boolean = false) {
         Log.wtf(ID, message)
         Log.wtf(ID, exception.format())
 
-        if (!suppressFatal && !preventEject)
-            Plugin.eject()
+        if (!suppressFatal && !preventEject) Plugin.eject()
     }
 
     fun tryOrFatal(action: String, block: () -> Unit): Unit? =
@@ -61,9 +67,7 @@ object Logger : EjectNotifier.Delegate {
         }
 
     override fun onEject() {
-        suppressFatal = true
-
-        // logger is notified about eject last
+        // логгер узнаёт о выгрузке последним
         info("Ejected!")
     }
 }
