@@ -16,7 +16,7 @@ buildscript {
 
 plugins {
     // Android itself.
-    id("com.android.library") version "9.4.0"
+    id("com.android.library") version "9.4.1"
 
     // Translations.
     id("de.comahe.i18n4k") version "0.11.2"
