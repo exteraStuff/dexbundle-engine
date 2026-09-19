@@ -21,7 +21,7 @@ plugins {
     // Translations.
     id("de.comahe.i18n4k") version "0.11.2"
 
-    id("io.github.exterastuff.gradle.plugin")
+    id("io.github.exterastuff.plugin")
 }
 
 i18n4k {
