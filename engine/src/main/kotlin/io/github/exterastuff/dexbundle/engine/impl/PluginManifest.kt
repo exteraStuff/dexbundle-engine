@@ -4,6 +4,8 @@ import com.exteragram.messenger.plugins.Plugin
 import io.github.exterastuff.dexbundle.engine.exception.InvalidPluginManifestException
 import io.github.exterastuff.dexbundle.engine.util.Logger
 import java.io.File
+import java.util.TreeMap
+import java.util.jar.Attributes
 import java.util.jar.JarFile
 import java.util.zip.ZipFile
 
@@ -19,6 +21,12 @@ data class PluginManifest(
 
     // id -> версия
     val dependencies: Map<String, String>,
+
+    // id -> источники, по порядку
+    val dependencySources: Map<String, List<DownloadSource>>,
+
+    // источники более новых сборок этого плагина, по порядку
+    val updateSources: List<DownloadSource>,
 
     // group:name -> версия
     val providedServices: Map<String, String>,
@@ -37,6 +45,10 @@ data class PluginManifest(
             "$SERVICES_DIRECTORY/${coordinates.replace(':', '.')}-$version.jar"
 
         private val ID_REGEX = Regex("""[^a-zA-Z0-9-_]""")
+
+        private val UPDATE_SOURCE_SECTION = Regex("""update-source/(\d+)""")
+        private val DEPENDENCY_SECTION = Regex("""dependency/([^/]+)""")
+        private val DEPENDENCY_SOURCE_SECTION = Regex("""dependency/([^/]+)/source/(\d+)""")
 
         private val CLASS_FQN_REGEX =
             Regex("""(?:[A-Za-z_$][A-Za-z0-9_$]*\.)+[A-Za-z_$][A-Za-z0-9_$]*""")
@@ -114,6 +126,79 @@ data class PluginManifest(
             CLASS_FQN_REGEX.matches(s) && s.split('.', '$').none { it in JAVA_KEYWORDS }
 
         /**
+         * Разбирает секции источников и зависимостей.
+         *
+         * @param sections секции манифеста по имени
+         * @param dependencies зависимости из `Plugin-Dependencies`
+         * @return источники обновлений и источники зависимостей по id
+         */
+        private fun parseSourceSections(
+            sections: Map<String, Attributes>,
+            dependencies: Map<String, String>,
+        ): Pair<List<DownloadSource>, Map<String, List<DownloadSource>>> {
+            val updateSources = TreeMap<Int, DownloadSource>()
+            val dependencySources = HashMap<String, TreeMap<Int, DownloadSource>>()
+
+            for ((name, attributes) in sections) {
+                UPDATE_SOURCE_SECTION.matchEntire(name)
+                    ?.let { match ->
+                        val source = DownloadSource.of(name, attributes)
+
+                        if (source.sha1 != null)
+                            throw InvalidPluginManifestException("Section $name must not have sha1: an update source serves new releases")
+
+                        updateSources[match.groupValues[1].toInt()] = source
+
+                        continue
+                    }
+
+                DEPENDENCY_SECTION.matchEntire(name)
+                    ?.let { match ->
+                        val id = match.groupValues[1]
+
+                        if (attributes.getValue("Dependency-Id") != id)
+                            throw InvalidPluginManifestException("Section $name has Dependency-Id that does not match its name")
+
+                        val version = dependencies[id]
+
+                        if (version == null || attributes.getValue("Dependency-Min-Version") != version)
+                            throw InvalidPluginManifestException("Section $name does not match Plugin-Dependencies")
+
+                        continue
+                    }
+
+                DEPENDENCY_SOURCE_SECTION.matchEntire(name)
+                    ?.let { match ->
+                        val id = match.groupValues[1]
+
+                        if (id !in dependencies)
+                            throw InvalidPluginManifestException("Section $name describes plugin '$id' missing in Plugin-Dependencies")
+
+                        val source = DownloadSource.of(name, attributes)
+
+                        if (source.sha1 == null)
+                            throw InvalidPluginManifestException("Section $name has no sha1")
+
+                        if (source is DownloadSource.GitHub && source.tag == null)
+                            throw InvalidPluginManifestException("Section $name has no tag")
+
+                        val index = match.groupValues[2].toInt()
+
+                        dependencySources.getOrPut(id, ::TreeMap)[index] = source
+                    }
+            }
+
+            val sources = updateSources
+                .values
+                .toList()
+
+            val depSources = dependencySources
+                .mapValues { (_, sources) -> sources.values.toList() }
+
+            return sources to depSources
+        }
+
+        /**
          * Парсит манифест плагина из jar файла.
          *
          * @param file jar файл плагина
@@ -125,12 +210,14 @@ data class PluginManifest(
         fun of(file: File): PluginManifest? =
             JarFile(file, true).use { jarFile ->
                 // это просто jar, а не плагин
-                val manifest =
-                    jarFile.manifest?.mainAttributes
+                val jarManifest =
+                    jarFile.manifest
                         ?: run {
                             Logger.info("no manifest")
                             return null
                         }
+
+                val manifest = jarManifest.mainAttributes
 
                 // это просто jar, а не плагин
                 val id =
@@ -202,6 +289,9 @@ data class PluginManifest(
                         }
                         .toMap()
 
+                val (updateSources, dependencySources) =
+                    parseSourceSections(jarManifest.entries, dependencies)
+
                 val providedServices = parseArtifactMap("Plugin-Provided-Services")
                 val requiredServices = parseArtifactMap("Plugin-Required-Services")
 
@@ -217,6 +307,8 @@ data class PluginManifest(
                         getAttribute("Plugin-Class").takeIf(::isValidClassFqn)
                             ?: throw InvalidPluginManifestException("Invalid main class FQN"),
                     dependencies = dependencies,
+                    dependencySources = dependencySources,
+                    updateSources = updateSources,
                     providedServices = providedServices,
                     requiredServices = requiredServices,
                     signers = SignerInfo.of(jarFile),

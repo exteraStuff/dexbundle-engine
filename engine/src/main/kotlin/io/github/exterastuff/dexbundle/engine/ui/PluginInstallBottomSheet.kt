@@ -49,6 +49,7 @@ class PluginInstallBottomSheet(
     private val params: PluginInstallParams,
     private val signature: PluginSignatureState,
     signers: Map<String, SignerInfo>?,
+    private val dependencies: List<String>,
 ) : BottomSheet(fragment.parentActivity, false, fragment.resourceProvider), EjectNotifier.Delegate {
 
     companion object {
@@ -67,8 +68,18 @@ class PluginInstallBottomSheet(
             params: PluginInstallParams,
             signature: PluginSignatureState,
             signers: Map<String, SignerInfo>?,
+            dependencies: List<String> = emptyList(),
         ) = runOnMainThread {
-            PluginInstallBottomSheet(fragment, engine, plugin, params, signature, signers).show()
+            PluginInstallBottomSheet(
+                fragment,
+                engine,
+                plugin,
+                params,
+                signature,
+                signers,
+                dependencies,
+            )
+                .show()
         }
     }
 
@@ -170,6 +181,13 @@ class PluginInstallBottomSheet(
             createDescription(),
             LayoutHelper.createLinear(MATCH_PARENT, WRAP_CONTENT, 0, 21f, 28f, 21f, 0f),
         )
+
+        if (dependencies.isNotEmpty()) {
+            content.addView(
+                createDependencies(),
+                LayoutHelper.createLinear(MATCH_PARENT, WRAP_CONTENT, 0, 21f, 16f, 21f, 0f),
+            )
+        }
 
         content.addView(button, LayoutHelper.createLinear(MATCH_PARENT, 48, 0, 16f, 28f, 16f, 16f))
 
@@ -456,6 +474,15 @@ class PluginInstallBottomSheet(
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
             setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlackText))
             text = LocaleUtils.fullyFormatText(plugin.getDescription(), fragment) { dismiss() }
+        }
+
+    private fun createDependencies(): View = TextView(context)
+        .apply {
+            gravity = Gravity.START
+            typeface = AndroidUtilities.regular()
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteGrayText))
+            text = Strings.dependenciesWillBeInstalled(dependencies.joinToString())
         }
 
     private fun wasSourceHintShown(): Boolean =

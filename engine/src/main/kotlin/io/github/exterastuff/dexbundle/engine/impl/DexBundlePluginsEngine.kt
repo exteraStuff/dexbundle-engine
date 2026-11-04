@@ -1,6 +1,7 @@
 package io.github.exterastuff.dexbundle.engine.impl
 
 import android.util.Log
+import androidx.annotation.WorkerThread
 import com.exteragram.messenger.plugins.Plugin
 import com.exteragram.messenger.plugins.PluginsController
 import com.exteragram.messenger.plugins.hooks.PluginsHooks
@@ -11,6 +12,7 @@ import io.github.exterastuff.dexbundle.api.BasePlugin
 import io.github.exterastuff.dexbundle.api.PluginContext
 import io.github.exterastuff.dexbundle.api.PluginLogger
 import io.github.exterastuff.dexbundle.engine.compat.ExteraConfigCompat
+import io.github.exterastuff.dexbundle.engine.download.PluginDownloader
 import io.github.exterastuff.dexbundle.engine.exception.UnsatisfiedRequirementException
 import io.github.exterastuff.dexbundle.engine.extension.format
 import io.github.exterastuff.dexbundle.engine.i18n.Strings
@@ -309,18 +311,123 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         pluginId: String,
         filePath: String,
         callback: (error: String?) -> Unit,
-    ) = PluginsController.runOnPluginsQueue {
-        val error = runCatching {
-            installBlocking(pluginId, filePath)
-        }
-            .getOrElse {
-                warn("Failed to install plugin '$pluginId': ${it.format()}")
-                it.toString()
+    ) = PluginDownloader.executor.execute {
+        // загрузка долгая, поэтому идёт до очереди плагинов, а не в ней
+        val dependencies =
+            try {
+                downloadDependencies(pluginId, filePath)
+            } catch (e: Throwable) {
+                warn("Failed to download dependencies of '$pluginId': ${e.format()}")
+
+                callback(e.toString())
+
+                return@execute
             }
 
-        pluginsController.notifyPluginsChanged()
+        PluginsController.runOnPluginsQueue {
+            val error = try {
+                for ((id, download) in dependencies) {
+                    savePluginEnabled(id, true)
 
-        callback(error)
+                    installBlocking(id, download.file.absolutePath)
+                        ?.let { throw IllegalStateException("Failed to install dependency '$id': $it") }
+                }
+
+                installBlocking(pluginId, filePath)
+            } catch (e: Throwable) {
+                warn("Failed to install plugin '$pluginId': ${e.format()}")
+                e.toString()
+            }
+
+            dependencies.values
+                .forEach { it.file.delete() }
+
+            pluginsController.notifyPluginsChanged()
+
+            callback(error)
+        }
+    }
+
+    /**
+     * Зависимости [manifest], которые не установлены или установлены в слишком старой версии.
+     *
+     * @return id и требуемая версия
+     */
+    fun missingDependencies(manifest: PluginManifest): Map<String, String> =
+        manifest.dependencies
+            .filter { (id, version) ->
+                val installed = manifests[id]
+                    ?: return@filter true
+
+                compareVersions(installed.version, version) < 0
+            }
+
+    /**
+     * Скачивает недостающие зависимости плагина из jar'а [filePath] и их собственные зависимости.
+     *
+     * @return скачанные зависимости по id, в порядке установки: каждая после своих зависимостей
+     */
+    @WorkerThread
+    @Throws(Throwable::class)
+    private fun downloadDependencies(
+        pluginId: String,
+        filePath: String,
+    ): Map<String, PluginDownloader.Download> {
+        val downloads = LinkedHashMap<String, PluginDownloader.Download>()
+
+        fun visit(manifest: PluginManifest, path: List<String>) {
+            for ((id, version) in missingDependencies(manifest)) {
+                if (id in downloads)
+                    continue
+
+                if (id in path)
+                    throw IllegalStateException("Dependency cycle: ${path + id}")
+
+                val sources = manifest.dependencySources[id]
+                    .orEmpty()
+
+                if (sources.isEmpty()) {
+                    throw UnsatisfiedRequirementException(
+                        "plugin $id:$version is not installed, and '${manifest.id}' " +
+                                "does not say where to download it"
+                    )
+                }
+
+                val download = PluginDownloader.download(id, sources)
+
+                try {
+                    if (compareVersions(download.manifest.version, version) < 0)
+                        throw IllegalStateException("Downloaded '$id' ${download.manifest.version} is older than $version")
+
+                    val signature =
+                        PluginSignatureState.of(download.manifest.signers, installedSigners(id))
+
+                    if (signature.blocksInstall)
+                        throw SecurityException("Signature of dependency '$id' is ${signature.name.lowercase()}")
+
+                    visit(download.manifest, path + id)
+                } catch (e: Throwable) {
+                    download.file.delete()
+                    throw e
+                }
+
+                downloads[id] = download
+            }
+        }
+
+        try {
+            val manifest = PluginManifest.of(File(filePath))
+                ?: throw IllegalArgumentException("Provided file is not an plugin")
+
+            visit(manifest, listOf(pluginId))
+        } catch (e: Throwable) {
+            downloads.values
+                .forEach { it.file.delete() }
+
+            throw e
+        }
+
+        return downloads
     }
 
     /**
@@ -982,6 +1089,7 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
             params,
             PluginSignatureState.of(manifest.signers, installedSigners(manifest.id)),
             manifest.signers,
+            missingDependencies(manifest).keys.toList(),
         )
     }
 
