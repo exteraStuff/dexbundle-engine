@@ -41,7 +41,7 @@ data class PluginManifest(
         private const val SERVICES_DIRECTORY = "services"
 
         /** Путь, по которому определение сервиса лежит внутри jar'а плагина. */
-        fun serviceEntry(coordinates: String, version: String): String =
+        fun serviceEntryName(coordinates: String, version: String): String =
             "$SERVICES_DIRECTORY/${coordinates.replace(':', '.')}-$version.jar"
 
         private val ID_REGEX = Regex("""[^a-zA-Z0-9-_]""")
@@ -55,59 +55,13 @@ data class PluginManifest(
 
         private val JAVA_KEYWORDS =
             setOf(
-                "abstract",
-                "assert",
-                "boolean",
-                "break",
-                "byte",
-                "case",
-                "catch",
-                "char",
-                "class",
-                "const",
-                "continue",
-                "default",
-                "do",
-                "double",
-                "else",
-                "enum",
-                "extends",
-                "final",
-                "finally",
-                "float",
-                "for",
-                "goto",
-                "if",
-                "implements",
-                "import",
-                "instanceof",
-                "int",
-                "interface",
-                "long",
-                "native",
-                "new",
-                "package",
-                "private",
-                "protected",
-                "public",
-                "return",
-                "short",
-                "static",
-                "strictfp",
-                "super",
-                "switch",
-                "synchronized",
-                "this",
-                "throw",
-                "throws",
-                "transient",
-                "try",
-                "void",
-                "volatile",
-                "while",
-                "true",
-                "false",
-                "null",
+                "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
+                "const", "continue", "default", "do", "double", "else", "enum", "extends", "final",
+                "finally", "float", "for", "goto", "if", "implements", "import", "instanceof",
+                "int", "interface", "long", "native", "new", "package", "private", "protected",
+                "public", "return", "short", "static", "strictfp", "super", "switch",
+                "synchronized", "this", "throw", "throws", "transient", "try", "void", "volatile",
+                "while", "true", "false", "null",
             )
 
         /** Символы, из которых может состоять часть координат в стиле maven. */
@@ -120,7 +74,8 @@ data class PluginManifest(
          * Проверяет часть координат сервиса. Из координат и версии складывается имя файла, в
          * который определение распаковывается, поэтому в них не может быть разделителей пути.
          */
-        private fun isValidArtifactPart(part: String): Boolean = ARTIFACT_PART_REGEX.matches(part)
+        private fun isValidArtifactPart(part: String): Boolean =
+            ARTIFACT_PART_REGEX.matches(part)
 
         private fun isValidClassFqn(s: String): Boolean =
             CLASS_FQN_REGEX.matches(s) && s.split('.', '$').none { it in JAVA_KEYWORDS }
@@ -210,65 +165,57 @@ data class PluginManifest(
         fun of(file: File): PluginManifest? =
             JarFile(file, true).use { jarFile ->
                 // это просто jar, а не плагин
-                val jarManifest =
-                    jarFile.manifest
-                        ?: run {
-                            Logger.info("no manifest")
-                            return null
-                        }
+                val jarManifest = jarFile.manifest
+                    ?: run {
+                        Logger.info("no manifest")
+                        return null
+                    }
 
                 val manifest = jarManifest.mainAttributes
 
                 // это просто jar, а не плагин
-                val id =
-                    manifest.getValue("Plugin-Id")
-                        ?: run {
-                            Logger.info("no id in manifest")
-                            return null
-                        }
+                val id = manifest.getValue("Plugin-Id")
+                    ?: run {
+                        Logger.info("no id in manifest")
+                        return null
+                    }
 
                 if (!isValidPluginId(id))
-                    throw InvalidPluginManifestException(
-                        "Plugin id should contain only ASCII-letters, digits, minus or underscore"
-                    )
+                    throw InvalidPluginManifestException("Plugin id should contain only ASCII-letters, digits, minus or underscore")
 
                 fun getAttribute(name: String): String =
                     manifest.getValue(name)
                         ?: throw InvalidPluginManifestException("Attribute $name not found")
 
                 fun getAttributeList(name: String): List<String> =
-                    getAttribute(name).trim().let {
-                        if (it.isEmpty()) emptyList() else it.split(", ")
-                    }
-
-                val dependencies =
-                    getAttributeList("Plugin-Dependencies")
-                        .map {
-                            val parts = it.split(":")
-
-                            if (parts.size != 2)
-                                throw InvalidPluginManifestException(
-                                    "Invalid Plugin-Dependencies attribute value"
-                                )
-
-                            if (!isValidPluginId(parts[0]))
-                                throw InvalidPluginManifestException(
-                                    "Invalid plugin id '${parts[0]}' in Plugin-Dependencies"
-                                )
-
-                            if (parts[0] == id)
-                                throw InvalidPluginManifestException(
-                                    "Plugin cannot depend on itself"
-                                )
-
-                            if (!isValidArtifactPart(parts[1]))
-                                throw InvalidPluginManifestException(
-                                    "Invalid version '${parts[1]}' in Plugin-Dependencies"
-                                )
-
-                            return@map parts[0] to parts[1]
+                    getAttribute(name)
+                        .trim()
+                        .let {
+                            if (it.isEmpty())
+                                emptyList()
+                            else
+                                it.split(", ")
                         }
-                        .toMap()
+
+                val dependencies = getAttributeList("Plugin-Dependencies")
+                    .map {
+                        val parts = it.split(":")
+
+                        if (parts.size != 2)
+                            throw InvalidPluginManifestException("Invalid Plugin-Dependencies attribute value")
+
+                        if (!isValidPluginId(parts[0]))
+                            throw InvalidPluginManifestException("Invalid plugin id '${parts[0]}' in Plugin-Dependencies")
+
+                        if (parts[0] == id)
+                            throw InvalidPluginManifestException("Plugin cannot depend on itself")
+
+                        if (!isValidArtifactPart(parts[1]))
+                            throw InvalidPluginManifestException("Invalid version '${parts[1]}' in Plugin-Dependencies")
+
+                        return@map parts[0] to parts[1]
+                    }
+                    .toMap()
 
                 fun parseArtifactMap(attributeName: String): Map<String, String> =
                     getAttributeList(attributeName)
@@ -276,14 +223,10 @@ data class PluginManifest(
                             val parts = it.split(":")
 
                             if (parts.size != 3)
-                                throw InvalidPluginManifestException(
-                                    "Invalid $attributeName attribute value"
-                                )
+                                throw InvalidPluginManifestException("Invalid $attributeName attribute value")
 
                             if (parts.any { part -> !isValidArtifactPart(part) })
-                                throw InvalidPluginManifestException(
-                                    "Invalid coordinates '$it' in $attributeName"
-                                )
+                                throw InvalidPluginManifestException("Invalid coordinates '$it' in $attributeName")
 
                             return@map "${parts[0]}:${parts[1]}" to parts[2]
                         }
@@ -303,9 +246,9 @@ data class PluginManifest(
                     author = getAttribute("Plugin-Author"),
                     version = getAttribute("Plugin-Version"),
                     minClientVersion = getAttribute("Plugin-Min-Client-Version"),
-                    entryClass =
-                        getAttribute("Plugin-Class").takeIf(::isValidClassFqn)
-                            ?: throw InvalidPluginManifestException("Invalid main class FQN"),
+                    entryClass = getAttribute("Plugin-Class")
+                        .takeIf(::isValidClassFqn)
+                        ?: throw InvalidPluginManifestException("Invalid main class FQN"),
                     dependencies = dependencies,
                     dependencySources = dependencySources,
                     updateSources = updateSources,
@@ -337,14 +280,10 @@ data class PluginManifest(
      * @param file jar файл плагина
      * @return список несуществующих определений
      */
-    fun getFakeServices(file: File): Set<String> {
-        val declaredServices =
-            providedServices.map { serviceEntry(it.key, it.value) }.toMutableSet()
-
-        ZipFile(file).use { zipFile ->
-            zipFile.stream().filter { !it.isDirectory }.forEach { declaredServices.remove(it.name) }
+    fun missingServiceEntries(file: File): Set<String> =
+        ZipFile(file).use { zip ->
+            providedServices
+                .map { (coordinates, version) -> serviceEntryName(coordinates, version) }
+                .filterTo(LinkedHashSet()) { zip.getEntry(it)?.isDirectory != false }
         }
-
-        return declaredServices
-    }
 }

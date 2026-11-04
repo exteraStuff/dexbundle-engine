@@ -34,18 +34,28 @@ enum class PluginSignatureState {
             signers: Map<String, SignerInfo>?,
             installedSigners: Map<String, SignerInfo>?,
         ): PluginSignatureState {
-            val installedFingerprints = installedSigners?.keys.orEmpty()
-            val fingerprints = signers?.keys.orEmpty()
+            val installedFingerprints = installedSigners
+                ?.keys
+                .orEmpty()
 
-            if (!fingerprints.containsAll(installedFingerprints)) return MISMATCH
+            val fingerprints = signers
+                ?.keys
+                .orEmpty()
 
-            if (signers.isNullOrEmpty()) return MISSING
+            if (!fingerprints.containsAll(installedFingerprints))
+                return MISMATCH
 
-            if (signers.values.any(SignerInfo::isRevoked)) return REVOKED
+            if (signers.isNullOrEmpty())
+                return MISSING
 
-            if (signers.values.any { !it.isValid }) return EXPIRED
+            if (signers.values.any(SignerInfo::isRevoked))
+                return REVOKED
 
-            if (signers.values.any(SignerInfo::isTrusted)) return TRUSTED
+            if (signers.values.any { !it.isValid })
+                return EXPIRED
+
+            if (signers.values.any(SignerInfo::isTrusted))
+                return TRUSTED
 
             return UNTRUSTED
         }

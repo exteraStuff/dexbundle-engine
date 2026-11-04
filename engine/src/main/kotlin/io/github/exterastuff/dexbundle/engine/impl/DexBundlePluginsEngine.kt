@@ -21,10 +21,6 @@ import io.github.exterastuff.dexbundle.engine.ui.PluginSignatureState
 import io.github.exterastuff.dexbundle.engine.util.Logger
 import io.github.exterastuff.dexbundle.engine.util.compareVersions
 import io.github.exterastuff.dexbundle.engine.util.runOnMainThread
-import java.io.File
-import java.io.IOException
-import java.lang.reflect.InvocationTargetException
-import java.util.concurrent.ConcurrentHashMap
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.BuildVars
 import org.telegram.messenger.MessageObject
@@ -35,6 +31,10 @@ import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.Components.BulletinFactory
+import java.io.File
+import java.io.IOException
+import java.lang.reflect.InvocationTargetException
+import java.util.concurrent.ConcurrentHashMap
 
 class DexBundlePluginsEngine : PluginsController.PluginsEngine {
     companion object {
@@ -54,13 +54,11 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         val codeCacheDir: File
             get() = ApplicationLoader.applicationContext.codeCacheDir
 
-        private fun warn(message: String) {
+        private fun warn(message: String) =
             Logger.warn("DexBundlePluginsEngine: $message")
-        }
 
-        private fun info(message: String) {
+        private fun info(message: String) =
             Logger.info("DexBundlePluginsEngine: $message")
-        }
     }
 
     /** Манифесты установленных плагинов по id. */
@@ -72,36 +70,45 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
     /** Контексты, выданные загруженным плагинам, по id. */
     private val contexts = ConcurrentHashMap<String, PluginContextImpl>()
 
-    /** Определения сервисов включённых плагинов. Родитель class-loader'а каждого плагина. */
-    @Volatile private var services: PluginServices? = null
+    /** Сервисы включённых плагинов. Собираются заново через [rebuildServices]. */
+    @Volatile
+    private var services: PluginServices? = null
 
     private val pluginsController
         get() = PluginsController.getInstance()
 
     /** Плагины этого движка в списке клиента. */
-    private val ownPlugins
-        get() = pluginsController.plugins.values.filter { it.getEngine() == ID }
+    private val listedPlugins
+        get() = pluginsController.plugins
+            .values
+            .filter { it.getEngine() == ID }
 
     /** Id установленных плагинов, которые должны работать. */
     private val enabledPlugins
-        get() = manifests.keys.filter(::isPluginEnabled)
+        get() = manifests
+            .keys
+            .filter(::isPluginEnabled)
 
     private val engineClassLoader
         get() = this::class.java.classLoader!!
 
     /** Должен ли плагин [id] работать. */
     private fun isPluginEnabled(id: String): Boolean =
-        pluginsController.preferences.getBoolean("$ENABLED_KEY_PREFIX$id", false)
+        pluginsController.preferences
+            .getBoolean("$ENABLED_KEY_PREFIX$id", false)
 
     /** Сохраняет, должен ли [id] работать, и ошибку [error], из-за которой он остановлен. */
     private fun savePluginEnabled(id: String, enabled: Boolean, error: Throwable? = null) {
-        pluginsController.preferences.edit().putBoolean("$ENABLED_KEY_PREFIX$id", enabled).apply()
+        pluginsController.preferences.edit()
+            .putBoolean("$ENABLED_KEY_PREFIX$id", enabled)
+            .apply()
 
-        pluginsController.plugins[id]?.setState(enabled, error)
+        pluginsController.plugins[id]
+            ?.setState(enabled, error)
     }
 
     /** Добавляет плагин из [manifest] в список плагинов клиента как ещё не запущенный. */
-    private fun publishPlugin(manifest: PluginManifest) {
+    private fun addToPluginList(manifest: PluginManifest) {
         pluginsController.plugins[manifest.id] = manifest.toPlugin()
     }
 
@@ -111,8 +118,9 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
      * Клиент смотрит на это поле, когда решает, жив ли плагин, поэтому оно следует за реальной
      * загрузкой, а не за сохранённым выбором пользователя.
      */
-    private fun publishPluginRunning(id: String, running: Boolean, error: Throwable? = null) {
-        pluginsController.plugins[id]?.setState(running, error)
+    private fun setPluginRunning(id: String, running: Boolean, error: Throwable? = null) {
+        pluginsController.plugins[id]
+            ?.setState(running, error)
     }
 
     /**
@@ -127,7 +135,7 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
     }
 
     @Throws(Throwable::class)
-    private fun manifestOf(id: String): PluginManifest =
+    private fun getOrLoadManifest(id: String): PluginManifest =
         manifests.getOrPut(id) {
             PluginManifest.of(pluginFile(id))
                 ?: throw IllegalArgumentException("Provided file is not a plugin")
@@ -137,7 +145,7 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
      * Вызывает код плагина под watchdog'ом клиента: если плагин повесит очередь плагинов, его можно
      * будет выключить вручную, а не ловить намертво зависший клиент.
      */
-    private inline fun <R> watched(id: String, block: () -> R): R {
+    private inline fun <R> runWatched(id: String, block: () -> R): R {
         val watchdog = pluginsController.watchdog
 
         watchdog.onPluginExecutionStarted(id)
@@ -149,28 +157,33 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         }
     }
 
-    /** Пересобирает общий class-loader из определений сервисов, которые дают [ids]. */
+    /** Собирает [services] заново из определений, которые предоставляют [ids]. */
     private fun rebuildServices(ids: Collection<String>): PluginServices {
         if (activePlugins.isNotEmpty())
             warn("Rebuilding services while ${activePlugins.keys.joinToString()} are loaded")
 
-        return PluginServices.build(ids.mapNotNull(manifests::get), engineClassLoader).also {
-            services = it
-        }
+        return PluginServices
+            .build(ids.mapNotNull(manifests::get), engineClassLoader)
+            .also { services = it }
     }
 
-    /** Общий class-loader включённых плагинов. Собирается при первом обращении. */
-    private fun requireServices(): PluginServices = services ?: rebuildServices(enabledPlugins)
+    /** [services], а если они ещё не собраны — собирает их для включённых плагинов. */
+    private fun getOrBuildServices(): PluginServices = services
+        ?: rebuildServices(enabledPlugins)
 
     /** [ids] и все установленные плагины, которые от них зависят, прямо или нет. */
-    private fun withDependents(ids: Collection<String>): Set<String> {
+    private fun pluginsAffectedBy(ids: Collection<String>): Set<String> {
         val result = LinkedHashSet(ids)
 
         do {
             val dependents =
                 manifests
-                    .filterKeys { it !in result }
-                    .filterValues { manifest -> manifest.dependencies.keys.any { it in result } }
+                    .filterKeys { pluginId -> pluginId !in result }
+                    .filterValues { manifest ->
+                        manifest.dependencies
+                            .keys
+                            .any { pluginId -> pluginId in result }
+                    }
                     .keys
 
             result.addAll(dependents)
@@ -179,42 +192,42 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         return result
     }
 
-    /** [ids] в порядке, где плагин идёт после тех, от кого зависит. */
-    private fun dependencyOrder(ids: Collection<String>): List<String> {
-        val pending = ids.toSet()
+    /** [pluginIds] в порядке, где плагин идёт после тех, от кого зависит. */
+    private fun dependencyOrder(pluginIds: Collection<String>): List<String> {
+        val pending = pluginIds.toSet()
         val ordered = LinkedHashSet<String>()
         val visiting = LinkedHashSet<String>()
 
-        fun visit(id: String) {
-            if (id !in pending || id in ordered) return
+        fun visit(pluginId: String) {
+            if (pluginId !in pending || pluginId in ordered) return
 
             // ура dep-cycle
-            if (!visiting.add(id)) {
-                warn("Dependency cycle: ${visiting.joinToString(" -> ")} -> $id")
+            if (!visiting.add(pluginId)) {
+                warn("Dependency cycle: ${visiting.joinToString(" -> ")} -> $pluginId")
                 return
             }
 
-            manifests[id]?.dependencies?.keys?.forEach { visit(it) }
+            manifests[pluginId]?.dependencies?.keys?.forEach { visit(it) }
 
-            visiting.remove(id)
-            ordered.add(id)
+            visiting.remove(pluginId)
+            ordered.add(pluginId)
         }
 
-        ids.forEach { visit(it) }
+        pluginIds.forEach { visit(it) }
 
         return ordered.toList()
     }
 
     /** Сообщает [dependentId], что его зависимость [dependencyId] сейчас выгрузят. */
     private fun notifyDependencyUnload(dependentId: String, dependencyId: String) {
-        val dependent = activePlugins[dependentId] ?: return
+        val dependent = activePlugins[dependentId]
+            ?: return
 
-        runCatching { watched(dependentId) { dependent.onDependencyUnload(dependencyId) } }
-            .onFailure {
-                warn(
-                    "Plugin '$dependentId' failed to handle unload of '$dependencyId': ${it.format()}"
-                )
-            }
+        try {
+            runWatched(dependentId) { dependent.onDependencyUnload(dependencyId) }
+        } catch (e: Throwable) {
+            warn("Plugin '$dependentId' failed to handle unload of '$dependencyId': ${e.format()}")
+        }
     }
 
     /** Выгружает [ids], начиная с зависимых. */
@@ -224,15 +237,20 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
 
         // зависимый плагин уходит вместе со своими зависимостями и узнаёт об этом, пока ещё
         // может отпустить всё, что у них взял
-        for (id in ordered) manifests[id]
-            ?.dependencies
-            ?.keys
-            .orEmpty()
-            .filter { it in batch }
-            .forEach { dependencyId -> notifyDependencyUnload(id, dependencyId) }
+        for (id in ordered) {
+            manifests[id]
+                ?.dependencies
+                ?.keys
+                .orEmpty()
+                .filter { it in batch }
+                .forEach { dependencyId -> notifyDependencyUnload(id, dependencyId) }
+        }
 
-        for (id in ordered) runCatching { unloadPlugin(id) }
-            .onFailure { warn("Failed to unload plugin '$id': ${it.format()}") }
+        for (id in ordered) try {
+            unloadPlugin(id)
+        } catch (e: Throwable) {
+            warn("Failed to unload plugin '$id': ${e.format()}")
+        }
     }
 
     /**
@@ -244,7 +262,8 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
      * @return ошибки по id плагина
      */
     private fun loadPlugins(ids: Collection<String>): Map<String, Throwable> {
-        if (ids.isEmpty()) return emptyMap()
+        if (ids.isEmpty())
+            return emptyMap()
 
         if (ExteraConfigCompat.isPluginsSafeMode()) {
             info("Safe mode is enabled, no plugin is started")
@@ -259,7 +278,7 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
             } catch (e: UnsatisfiedRequirementException) {
                 info("Plugin '$id' is not started: ${e.message}")
 
-                publishPluginRunning(id, running = false, error = e)
+                setPluginRunning(id, running = false, error = e)
                 errors[id] = e
             } catch (e: Throwable) {
                 warn("Failed to load plugin '$id': ${e.format()}")
@@ -275,29 +294,37 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
     /**
      * Перезапускает [ids] вместе с зависящими от них плагинами.
      *
-     * @param withServices пересобрать ещё и общий class-loader. Это перезапускает все работающие
-     *   плагины, так как их class-loader'ы — его потомки.
+     * @param servicesChanged изменились ли определения сервисов. Тогда общий class-loader
+     *   пересобирается, а перезапускаются все работающие плагины, так как их class-loader'ы — его
+     *   потомки.
      * @return ошибки по id плагина
      */
     @Synchronized
-    private fun reload(
+    private fun reloadPlugins(
         ids: Collection<String>,
-        withServices: Boolean,
+        servicesChanged: Boolean,
     ): Map<String, Throwable> {
         val enabled = enabledPlugins
 
         val affected =
-            if (withServices) activePlugins.keys + enabled
-            else withDependents(ids).filter { activePlugins.containsKey(it) || it in enabled }
+            if (servicesChanged)
+                activePlugins.keys + enabled
+            else
+                pluginsAffectedBy(ids)
+                    .filter { activePlugins.containsKey(it) || it in enabled }
 
         info(
             "reload ${affected.joinToString().ifEmpty { "nothing" }}" +
-                if (withServices) " (with services)" else ""
+                    if (servicesChanged)
+                        " (with services)"
+                    else
+                        ""
         )
 
         unloadPlugins(affected)
 
-        if (withServices) rebuildServices(enabled)
+        if (servicesChanged)
+            rebuildServices(enabled)
 
         return loadPlugins(affected.filter { it in enabled })
     }
@@ -440,23 +467,19 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
     private fun installBlocking(pluginId: String, filePath: String): String? {
         val source = File(filePath)
 
-        if (!source.isFile) return "File $filePath not found"
+        if (!source.isFile)
+            return "File $filePath not found"
 
-        val manifest =
-            PluginManifest.of(source)
-                ?: throw IllegalArgumentException("Provided file is not an plugin")
+        val manifest = PluginManifest.of(source)
+            ?: throw IllegalArgumentException("Provided file is not an plugin")
 
         if (manifest.id != pluginId)
-            throw IllegalArgumentException(
-                "Plugin file declares id '${manifest.id}', but '$pluginId' was expected"
-            )
+            throw IllegalArgumentException("Plugin file declares id '${manifest.id}', but '$pluginId' was expected")
 
-        val fakeServices = manifest.getFakeServices(source)
+        val missingServices = manifest.missingServiceEntries(source)
 
-        if (fakeServices.isNotEmpty())
-            throw IllegalArgumentException(
-                "Plugin does not ship declared services ${fakeServices.joinToString()}"
-            )
+        if (missingServices.isNotEmpty())
+            throw IllegalArgumentException("Plugin does not ship declared services ${missingServices.joinToString()}")
 
         val installedManifest = manifests[pluginId]
 
@@ -468,20 +491,23 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
 
         // определения сервисов лежат в общем class-loader'е, поэтому их появление или пропажа
         // задевает все плагины
-        val withServices =
-            manifest.providedServices.isNotEmpty() ||
-                installedManifest?.providedServices?.isNotEmpty() == true
+        val servicesChanged = manifest.providedServices.isNotEmpty()
+                || installedManifest?.providedServices?.isNotEmpty() == true
 
         // останавливаем работающую копию и всё, что на неё опирается, а при смене общих
         // определений — вообще все плагины
-        if (withServices) unloadPlugins(activePlugins.keys.toList())
-        else unloadPlugins(withDependents(listOf(pluginId)))
+        unloadPlugins(
+            if (servicesChanged)
+                activePlugins.keys.toList()
+            else
+                pluginsAffectedBy(listOf(pluginId))
+        )
 
         try {
             writePluginFile(source, pluginFile(pluginId))
         } catch (e: Throwable) {
             // предыдущая версия осталась на месте, поэтому просто возвращаем её в работу
-            reload(listOf(pluginId), withServices)
+            reloadPlugins(listOf(pluginId), servicesChanged)
 
             throw e
         }
@@ -489,20 +515,19 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         manifests[pluginId] = manifest
 
         // определения сервисов обеих версий уже распакованы
-        PluginServices.invalidate(listOfNotNull(installedManifest, manifest))
+        PluginServices.deleteExtracted(listOfNotNull(installedManifest, manifest))
 
-        publishPlugin(manifest)
+        addToPluginList(manifest)
 
         // зависящие от него плагины работают с предыдущей версией, поэтому их тоже
         // перезапускаем
-        reload(listOf(pluginId), withServices)
+        reloadPlugins(listOf(pluginId), servicesChanged)
 
         return null
     }
 
     /**
-     * Кладёт [source] на место установленного плагина. Незавершённая запись не оставляет после себя
-     * повреждённый jar.
+     * Кладёт [source] на место установленного плагина.
      *
      * @throws IOException
      */
@@ -528,10 +553,9 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
 
         val clientVersion = BuildVars.BUILD_VERSION_STRING
 
-        if (
-            manifest.minClientVersion.isNotBlank() &&
-                !clientVersion.isNullOrBlank() &&
-                compareVersions(clientVersion, manifest.minClientVersion) < 0
+        if (manifest.minClientVersion.isNotBlank()
+            && !clientVersion.isNullOrBlank()
+            && compareVersions(clientVersion, manifest.minClientVersion) < 0
         )
             requirements.add("client ${manifest.minClientVersion} (running $clientVersion)")
 
@@ -549,12 +573,12 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
             }
         }
 
-        val services = requireServices()
+        val services = getOrBuildServices()
 
-        for ((coordinates, version) in manifest.requiredServices) if (
-            !services.provides(coordinates, version)
-        )
-            requirements.add("service $coordinates:$version")
+        for ((coordinates, version) in manifest.requiredServices) {
+            if (!services.provides(coordinates, version))
+                requirements.add("service $coordinates:$version")
+        }
 
         return requirements
     }
@@ -562,43 +586,43 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
     @Throws(Throwable::class)
     @Synchronized
     fun loadPlugin(id: String) {
-        if (activePlugins.containsKey(id)) return
+        if (activePlugins.containsKey(id))
+            return
 
         if (ExteraConfigCompat.isPluginsSafeMode())
             throw UnsatisfiedRequirementException("safe mode is enabled")
 
         val file = pluginFile(id)
 
-        if (!file.isFile) throw IllegalStateException("Plugin '$id' is not installed")
+        if (!file.isFile)
+            throw IllegalStateException("Plugin '$id' is not installed")
 
         file.setWritable(false)
 
-        val manifest = manifestOf(id)
+        val manifest = getOrLoadManifest(id)
 
         val requirements = unsatisfiedRequirements(manifest)
 
         if (requirements.isNotEmpty())
             throw UnsatisfiedRequirementException("requires ${requirements.joinToString()}")
 
-        val services = requireServices()
+        val services = getOrBuildServices()
 
-        val classLoader =
-            DexClassLoader(
-                file.absolutePath,
-                codeCacheDir.absolutePath,
-                null,
-                services.classLoader,
+        val classLoader = DexClassLoader(
+            file.absolutePath,
+            codeCacheDir.absolutePath,
+            null,
+            services.classLoader,
+        )
+
+        val entryClass = try {
+            classLoader.loadClass(manifest.entryClass)
+        } catch (e: Throwable) {
+            throw IllegalArgumentException(
+                "Failed to load entry class ${manifest.entryClass}",
+                e,
             )
-
-        val entryClass =
-            try {
-                classLoader.loadClass(manifest.entryClass)
-            } catch (e: Throwable) {
-                throw IllegalArgumentException(
-                    "Failed to load entry class ${manifest.entryClass}",
-                    e,
-                )
-            }
+        }
 
         if (!BasePlugin::class.java.isAssignableFrom(entryClass))
             throw ClassCastException("Provided entry class is not a child of BasePlugin")
@@ -621,10 +645,10 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         contexts[id] = context
 
         try {
-            watched(id) { plugin.load(context) }
+            runWatched(id) { plugin.load(context) }
         } catch (e: Throwable) {
             try {
-                watched(id) { plugin.unload() }
+                runWatched(id) { plugin.unload() }
             } catch (_: Throwable) {
                 // плагин уже упал, ошибку выгрузки пробрасывать незачем
             }
@@ -634,22 +658,26 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
             contexts.remove(id, context)
             services.unregisterServices(id)
 
-            runCatching { pluginsController.cleanupPlugin(id) }
-                .onFailure { warn("Failed to clean up plugin '$id': ${it.format()}") }
+            try {
+                pluginsController.cleanupPlugin(id)
+            } catch (e: Throwable) {
+                warn("Failed to clean up plugin '$id': ${e.format()}")
+            }
 
             throw e
         }
 
         activePlugins[id] = plugin
 
-        publishPluginRunning(id, running = true)
+        setPluginRunning(id, running = true)
     }
 
     @Throws(Throwable::class)
     @Synchronized
     fun unloadPlugin(id: String) {
         // дальше плагин уже не сможет попросить выгрузить себя ещё раз
-        val plugin = activePlugins.remove(id) ?: return
+        val plugin = activePlugins.remove(id)
+            ?: return
 
         // предупреждаем зависимые плагины, которые переживут этот
         manifests.values
@@ -657,26 +685,33 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
             .forEach { notifyDependencyUnload(it.id, id) }
 
         try {
-            watched(id) { plugin.unload() }
+            runWatched(id) { plugin.unload() }
         } finally {
             // плагин закончил уборку, остальное убираем за него
-            contexts.remove(id)?.detach()
+            contexts.remove(id)
+                ?.detach()
 
             services?.unregisterServices(id)
 
             // ошибку не трогаем: её мог только что выставить сам плагин или выключение руками
-            pluginsController.plugins[id]?.setEnabled(false)
+            pluginsController.plugins[id]
+                ?.setEnabled(false)
 
             // хуки, пункты меню и настройки, которые плагин сам зарегистрировал в клиенте
-            runCatching { pluginsController.cleanupPlugin(id) }
-                .onFailure { warn("Failed to clean up plugin '$id': ${it.format()}") }
+            try {
+                pluginsController.cleanupPlugin(id)
+            } catch (e: Throwable) {
+                warn("Failed to clean up plugin '$id': ${e.format()}")
+            }
         }
     }
 
     override fun isPlugin(file: File?, messageObject: MessageObject?): Boolean {
-        if (file == null) return false
+        if (file == null)
+            return false
 
-        if (file.extension != PLUGINS_EXTENSION) return false
+        if (file.extension != PLUGINS_EXTENSION)
+            return false
 
         return try {
             PluginManifest.of(file) != null
@@ -711,7 +746,8 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
                 .orEmpty()
                 .filter { file -> file.isFile && file.name.endsWith(".$PLUGINS_EXTENSION.tmp") }
                 .forEach { file ->
-                    if (!file.delete()) warn("Failed to delete leftover ${file.name}")
+                    if (!file.delete())
+                        warn("Failed to delete leftover ${file.name}")
                 }
 
             pluginsDir
@@ -719,12 +755,13 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
                 .orEmpty()
                 .filter { file -> file.isFile && file.extension == PLUGINS_EXTENSION }
                 .mapNotNull { file ->
-                    val manifest =
-                        runCatching { PluginManifest.of(file) }
-                            .onFailure {
-                                warn("Failed to read plugin '${file.name}': ${it.format()}")
-                            }
-                            .getOrNull() ?: return@mapNotNull null
+                    val manifest = try {
+                        PluginManifest.of(file)
+                            ?: return@mapNotNull null
+                    } catch (e: Throwable) {
+                        warn("Failed to read plugin '${file.name}': ${e.format()}")
+                        return@mapNotNull null
+                    }
 
                     if (file.nameWithoutExtension != manifest.id) {
                         warn("Plugin '${file.name}' declares id '${manifest.id}', skipping it")
@@ -737,11 +774,11 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
                 .forEach { manifest ->
                     manifests[manifest.id] = manifest
 
-                    publishPlugin(manifest)
+                    addToPluginList(manifest)
                 }
 
             // плагин, чей jar пропал, уходит и из списка клиента
-            ownPlugins
+            listedPlugins
                 .map { it.getId() }
                 .filterNot(manifests::containsKey)
                 .forEach(pluginsController.plugins::remove)
@@ -784,7 +821,7 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         try {
             unloadPlugins(activePlugins.keys.toList())
 
-            ownPlugins.map { it.getId() }.forEach(pluginsController.plugins::remove)
+            listedPlugins.map { it.getId() }.forEach(pluginsController.plugins::remove)
 
             // сбрасываем все ссылки
             activePlugins.clear()
@@ -824,14 +861,17 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
 
             // плагин раздаёт свои определения сервисов через общий class-loader, поэтому и
             // запуск, и остановка требуют его пересборки
-            val withServices =
-                runCatching { manifestOf(pluginId) }.getOrNull()?.providedServices?.isNotEmpty() ==
-                    true
+            val servicesChanged =
+                runCatching { getOrLoadManifest(pluginId) }
+                    .getOrNull()
+                    ?.providedServices
+                    ?.isNotEmpty() == true
 
             savePluginEnabled(pluginId, enabled, error)
 
             // зависящие от него плагины идут следом: без него они не работают
-            reload(listOf(pluginId), withServices)[pluginId]?.let { throw it }
+            reloadPlugins(listOf(pluginId), servicesChanged)[pluginId]
+                ?.let { throw it }
 
             // сообщаем об успехе
             runOnMainThread { callback?.run(null) }
@@ -839,8 +879,9 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
             // с самим плагином всё в порядке, если он лишь ждёт требование: оставляем его
             // включённым, и он стартует, как только дождётся
             if (e is UnsatisfiedRequirementException)
-                publishPluginRunning(pluginId, running = false, error = e)
-            else savePluginEnabled(pluginId, false, e)
+                setPluginRunning(pluginId, running = false, error = e)
+            else
+                savePluginEnabled(pluginId, false, e)
 
             // сообщаем об ошибке буллетином
             runOnMainThread { callback?.run(e.toString()) }
@@ -874,27 +915,30 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         info("delete plugin '$pluginId'")
 
         val manifest = manifests[pluginId]
-        val withServices = manifest?.providedServices?.isNotEmpty() == true
+        val servicesChanged = manifest?.providedServices?.isNotEmpty() == true
 
         try {
             // загруженный jar удалить нельзя, как и jar'ы плагинов, которые сейчас лишатся
             // зависимости; общие определения читают все плагины, поэтому их тоже останавливаем
-            if (withServices) unloadPlugins(activePlugins.keys.toList())
-            else unloadPlugins(withDependents(listOf(pluginId)))
+            if (servicesChanged)
+                unloadPlugins(activePlugins.keys.toList())
+            else
+                unloadPlugins(pluginsAffectedBy(listOf(pluginId)))
 
             val file = pluginFile(pluginId)
 
             if (file.exists()) {
                 file.setWritable(true)
 
-                if (!file.delete()) throw IOException("Failed to delete ${file.name}")
+                if (!file.delete())
+                    throw IOException("Failed to delete ${file.name}")
             }
         } catch (e: Throwable) {
             warn("Failed to delete plugin '$pluginId': ${e.format()}")
 
             // раз плагин не удалился, убирать его из списка незачем: он загрузится при
             // следующем старте движка
-            reload(listOf(pluginId), withServices)
+            reloadPlugins(listOf(pluginId), servicesChanged)
 
             pluginsController.notifyPluginsChanged()
 
@@ -915,10 +959,11 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         pluginsController.plugins.remove(pluginId)
 
         // определения, которые он поставлял, уходят из общего class-loader'а вместе с ним
-        if (withServices) manifest?.let { PluginServices.invalidate(listOf(it)) }
+        if (servicesChanged)
+            PluginServices.deleteExtracted(listOf(manifest))
 
         // зависевшие от него плагины покажут это как невыполненное требование
-        reload(listOf(pluginId), withServices)
+        reloadPlugins(listOf(pluginId), servicesChanged)
 
         pluginsController.notifyPluginsChanged()
 
@@ -1019,15 +1064,13 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
 
     /** Ответ хука, который ничего не меняет в вызове клиента. */
     private fun <T> emptyHookResult(): PluginsController.HookResult<T> =
-        PluginsController.HookResult(
-            null,
-            cancel = false,
-            isFinal = false,
-        )
+        PluginsController.HookResult(null, cancel = false, isFinal = false)
 
     /** Подписи установленной версии [pluginId], если он вообще установлен. */
     private fun installedSigners(pluginId: String): Map<String, SignerInfo>? {
-        val file = pluginFile(pluginId).takeIf(File::exists) ?: return null
+        val file = pluginFile(pluginId)
+            .takeIf(File::exists)
+            ?: return null
 
         return runCatching { PluginManifest.of(file) }
             .onFailure { info("failed to read installed plugin '$pluginId': $it") }
@@ -1046,10 +1089,10 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         val manifest =
             try {
                 PluginManifest.of(file)?.let {
-                    val fakeServices = it.getFakeServices(file)
+                    val missingServices = it.missingServiceEntries(file)
 
-                    if (fakeServices.isNotEmpty()) {
-                        warn("Plugin '${file.name}' is missing declared services: $fakeServices")
+                    if (missingServices.isNotEmpty()) {
+                        warn("Plugin '${file.name}' is missing declared services: $missingServices")
 
                         runOnMainThread {
                             BulletinFactory.of(fragment)
@@ -1098,7 +1141,8 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         private val id: String,
         private val services: PluginServices,
     ) : PluginContext {
-        @Volatile private var attached = true
+        @Volatile
+        private var attached = true
 
         private val logger =
             object : PluginLogger {
@@ -1127,12 +1171,16 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         override fun getLogger(): PluginLogger = logger
 
         override fun unloadSelf(error: Throwable?) {
-            if (!attached) return
+            if (!attached)
+                return
 
             // плагин может попросить об этом прямо из своей загрузки или выгрузки, поэтому
-            // сначала даём движку кончить :)
+            // сначала даём движку закончить (тут была невероятная шутка. уже не смешно)
             PluginsController.runOnPluginsQueue {
-                if (attached) setPluginEnabled(id, false, error, null)
+                if (!attached)
+                    return@runOnPluginsQueue
+
+                setPluginEnabled(id, false, error, null)
             }
         }
 

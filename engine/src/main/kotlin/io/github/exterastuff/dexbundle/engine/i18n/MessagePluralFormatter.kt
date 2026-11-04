@@ -34,25 +34,30 @@ object MessagePluralFormatter : MessageValueFormatter {
                 else -> value?.toString()?.toIntOrNull() ?: 0
             }
 
-        matchingPart(style, category(count, locale.language))
+        matchingPart(style, pluralCategory(count, locale.language))
             ?.format(result, parameters, locale, context)
     }
 
     private fun matchingPart(style: StylePart, category: String): MessagePart? {
-        if (style is StylePartMessage) return style.messagePart
+        if (style is StylePartMessage)
+            return style.messagePart
 
         var found = false
+
         if (style is StylePartList) {
             for (part in style.list) {
                 if (part is StylePartArgument && (part.value == category || part.value == OTHER))
                     found = true
-                if (part is StylePartMessage && found) return part.messagePart
+
+                if (part is StylePartMessage && found)
+                    return part.messagePart
             }
         }
+
         return null
     }
 
-    private fun category(count: Int, lang: String): String {
+    private fun pluralCategory(count: Int, lang: String): String {
         val n = abs(count)
 
         return when (lang) {
@@ -67,7 +72,10 @@ object MessagePluralFormatter : MessageValueFormatter {
                 }
             }
 
-            else -> if (n == 1) "one" else "other"
+            else -> if (n == 1)
+                "one"
+            else
+                "other"
         }
     }
 }

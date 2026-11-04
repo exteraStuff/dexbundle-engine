@@ -42,22 +42,25 @@ data class SignerInfo(
         private val REVOKED_FINGERPRINTS =
             hashMapOf(
                 "E61594D19F9F3B2C7FD3E7ECBB92DC80D0435E32CE7D8D1D79D273F0DAC57E51" to
-                    Date.from(Instant.ofEpochMilli(0))
+                        Date.from(Instant.ofEpochMilli(0))
             )
 
         private fun JarEntry.isSignatureRelated(): Boolean {
             val n = name.uppercase()
 
-            if (!n.startsWith("META-INF/")) return false
+            if (!n.startsWith("META-INF/"))
+                return false
 
             val tail = n.removePrefix("META-INF/")
 
             // вложенность запрещена
-            if (tail.contains('/')) return false
+            @Suppress("RedundantSuppression", "RedundantIf") // readability
+            if (tail.contains('/'))
+                return false
 
             return tail == "MANIFEST.MF" ||
-                tail.startsWith("SIG-") ||
-                SIG_SUFFIXES.any(tail::endsWith)
+                    tail.startsWith("SIG-") ||
+                    SIG_SUFFIXES.any(tail::endsWith)
         }
 
         fun of(jar: JarFile): LinkedHashMap<String, SignerInfo>? {
@@ -67,30 +70,36 @@ data class SignerInfo(
                 e.isSignatureRelated() && SIG_SUFFIXES.any { e.name.uppercase().endsWith(it) }
             }
 
-            if (!hasSignatureBlock) return null
+            if (!hasSignatureBlock)
+                return null
 
             val buf = ByteArray(16 * 1024)
             val signers = LinkedHashMap<String, SignerInfo>()
             var payloadEntries = 0
 
             for (e in entries) {
-                jar.getInputStream(e).use { ins -> while (ins.read(buf) != -1) continue }
+                jar.getInputStream(e)
+                    .use { ins -> while (ins.read(buf) != -1) continue }
 
-                if (e.isDirectory || e.isSignatureRelated()) continue
+                if (e.isDirectory || e.isSignatureRelated())
+                    continue
 
                 payloadEntries++
 
-                val cs = e.codeSigners ?: throw SecurityException("Unsigned entry ${e.name}")
+                val cs = e.codeSigners
+                    ?: throw SecurityException("Unsigned entry ${e.name}")
 
                 for (signer in cs) {
-                    val chain = signer.signerCertPath.certificates.map { it as X509Certificate }
+                    val chain = signer
+                        .signerCertPath
+                        .certificates
+                        .map { it as X509Certificate }
 
                     val ts = signer.timestamp
 
-                    val fp =
-                        MessageDigest.getInstance("SHA-256")
-                            .digest(chain.first().encoded)
-                            .joinToString("") { "%02X".format(it) }
+                    val fp = MessageDigest.getInstance("SHA-256")
+                        .digest(chain.first().encoded)
+                        .joinToString("") { "%02X".format(it) }
 
                     signers.getOrPut(fp) {
                         SignerInfo(
@@ -124,14 +133,19 @@ data class SignerInfo(
 
     val isRevoked: Boolean
         get() {
-            val fromDate = REVOKED_FINGERPRINTS[fingerprint] ?: return false
+            val fromDate = REVOKED_FINGERPRINTS[fingerprint]
+                ?: return false
 
-            return signedAt?.let { it >= fromDate } ?: true
+            return signedAt
+                ?.let { it >= fromDate }
+                ?: true
         }
 
     /** Плагин подписан до того, как сертификат истёк. */
     val isTsaValid: Boolean
-        get() = signedAt?.let { it >= leaf.notBefore && it <= leaf.notAfter } ?: false
+        get() = signedAt
+            ?.let { it >= leaf.notBefore && it <= leaf.notAfter }
+            ?: false
 
     /**
      * Сертификат не отозван и не истёк, либо TSA подтверждает, что плагин подписали до истечения.

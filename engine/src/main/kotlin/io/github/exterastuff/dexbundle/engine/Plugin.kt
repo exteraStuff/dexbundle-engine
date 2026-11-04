@@ -2,17 +2,18 @@ package io.github.exterastuff.dexbundle.engine
 
 import androidx.annotation.AnyThread
 import com.exteragram.messenger.plugins.PluginsController
+import io.github.exterastuff.dexbundle.engine.Plugin.Companion.STATE_LOCK
 import io.github.exterastuff.dexbundle.engine.eject.EjectNotifier
 import io.github.exterastuff.dexbundle.engine.i18n.setupI18n
 import io.github.exterastuff.dexbundle.engine.impl.DexBundlePluginsEngine
 import io.github.exterastuff.dexbundle.engine.util.Logger
 import io.github.exterastuff.dexbundle.engine.util.getAs
 import io.github.exterastuff.dexbundle.engine.util.getField
+import org.jetbrains.annotations.Blocking
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.Supplier
 import kotlin.concurrent.thread
 import kotlin.time.Instant
-import org.jetbrains.annotations.Blocking
 
 class Plugin private constructor() {
     @Suppress("unused")
@@ -23,9 +24,11 @@ class Plugin private constructor() {
 
         private const val HANDLE_KEY = "io.github.exterastuff.dexbundle.engine.handle"
 
-        @Volatile private var WAS_INJECTED = false
+        @Volatile
+        private var WAS_INJECTED = false
 
-        @Volatile private var INSTANCE: Plugin? = null
+        @Volatile
+        private var INSTANCE: Plugin? = null
 
         private var VERSION: String? = null
 
@@ -35,13 +38,15 @@ class Plugin private constructor() {
         fun getBuildDate(): String =
             Instant.fromEpochMilliseconds(BuildConfig.BUILD_TIME).toString()
 
-        @JvmStatic fun getVersion(): String? = VERSION
+        @JvmStatic
+        fun getVersion(): String? = VERSION
 
         @Blocking
         @JvmStatic
         fun inject(version: String): Unit =
             synchronized(STATE_LOCK) {
-                if (INSTANCE != null) return
+                if (INSTANCE != null)
+                    return
 
                 if (WAS_INJECTED)
                     throw IllegalStateException("Cannot inject plugin from same class-loader twice")
@@ -54,7 +59,7 @@ class Plugin private constructor() {
                 // не даём двум инъекциям (из разных class-loader'ов) идти одновременно
                 synchronized(props) {
                     @Suppress("UNCHECKED_CAST")
-                    (props.put(HANDLE_KEY, Supplier { runEjectThread() }) as? Supplier<Thread>)
+                    (props.put(HANDLE_KEY, Supplier { startEjectThread() }) as? Supplier<Thread>)
                         ?.apply {
                             Logger.info("Plugin is probably injected in different class loader!")
 
@@ -65,9 +70,9 @@ class Plugin private constructor() {
                     setupI18n()
 
                     try {
-                        val plugin = Plugin().also { INSTANCE = it }
-
-                        plugin.onInject()
+                        Plugin()
+                            .also { INSTANCE = it }
+                            .onInject()
                     } catch (e: Throwable) {
                         Logger.fatal("Failed to create and inject plugin", e, preventEject = true)
 
@@ -81,7 +86,7 @@ class Plugin private constructor() {
             }
 
         @AnyThread
-        private fun runEjectThread(): Thread =
+        private fun startEjectThread(): Thread =
             thread(contextClassLoader = Plugin::class.java.classLoader) {
                 synchronized(STATE_LOCK) { ejectLocked() }
             }
@@ -113,7 +118,7 @@ class Plugin private constructor() {
                 return
             }
 
-            runEjectThread().join()
+            startEjectThread().join()
         }
     }
 
@@ -125,10 +130,11 @@ class Plugin private constructor() {
     }
 
     private fun onInject() {
-        DexBundlePluginsEngine().apply {
-            enginesMap[DexBundlePluginsEngine.ID] = this
-            init {}
-        }
+        DexBundlePluginsEngine()
+            .apply {
+                enginesMap[DexBundlePluginsEngine.ID] = this
+                init {}
+            }
 
         Logger.info("Injected!")
     }
@@ -137,7 +143,8 @@ class Plugin private constructor() {
     private fun onEject() {
         Logger.info("onEject called!")
 
-        val engine = enginesMap[DexBundlePluginsEngine.ID] as? DexBundlePluginsEngine ?: return
+        val engine = enginesMap[DexBundlePluginsEngine.ID] as? DexBundlePluginsEngine
+            ?: return
 
         try {
             engine.shutdown {}

@@ -9,7 +9,8 @@ object EjectNotifier {
 
     private val listeners = ArrayList<Listener>()
 
-    @Volatile private var fired = false
+    @Volatile
+    private var fired = false
 
     /**
      * Подписывается на выгрузку плагина. Подписка после выгрузки сразу же вызывает [listener], так
@@ -38,23 +39,27 @@ object EjectNotifier {
     fun fire() {
         val pending =
             synchronized(this) {
-                if (fired) return
+                if (fired)
+                    return
 
                 fired = true
 
-                listeners.sortedBy { it.priority }.also { listeners.clear() }
+                listeners
+                    .sortedBy { it.priority }
+                    .also { listeners.clear() }
             }
 
         // упавший слушатель не должен мешать остальным отпустить плагин
-        for (listener in pending) try {
-            listener.callback()
+        for ((_, callback) in pending) try {
+            callback()
         } catch (e: Throwable) {
             Logger.warn("Eject listener failed: ${e.format()}")
         }
     }
 
     interface Delegate {
-        @AnyThread fun onEject()
+        @AnyThread
+        fun onEject()
     }
 
     fun subscribe(delegate: Delegate, priority: Int = 0): () -> Unit =

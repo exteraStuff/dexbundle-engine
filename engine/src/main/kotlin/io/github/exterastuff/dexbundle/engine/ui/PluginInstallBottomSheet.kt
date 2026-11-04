@@ -99,10 +99,14 @@ class PluginInstallBottomSheet(
 
     private lateinit var signatureChip: View
 
-    private val issuers = signers?.values?.map(SignerInfo::issuer)?.distinct().orEmpty()
+    private val issuers = signers
+        ?.values
+        ?.map(SignerInfo::issuer)
+        ?.distinct()
+        .orEmpty()
 
-    private val button =
-        ButtonWithCounterView(context, true, resourcesProvider).apply {
+    private val button = ButtonWithCounterView(context, true, resourcesProvider)
+        .apply {
             setRound()
             setText(installButtonText(), false)
             setSubText(blockReasonText(), false)
@@ -119,8 +123,8 @@ class PluginInstallBottomSheet(
 
         fixNavigationBar()
 
-        val content =
-            LinearLayout(context).apply {
+        val content = LinearLayout(context)
+            .apply {
                 orientation = LinearLayout.VERTICAL
                 clipChildren = false
                 clipToPadding = false
@@ -150,7 +154,7 @@ class PluginInstallBottomSheet(
         )
 
         // при доверенной подписи источник уже не важен
-        if (signature != PluginSignatureState.TRUSTED)
+        if (signature != PluginSignatureState.TRUSTED) {
             content.addView(
                 createSourceChip(),
                 LayoutHelper.createLinear(
@@ -163,6 +167,7 @@ class PluginInstallBottomSheet(
                     0f,
                 ),
             )
+        }
 
         content.addView(
             createSignatureChip(),
@@ -191,7 +196,7 @@ class PluginInstallBottomSheet(
 
         content.addView(button, LayoutHelper.createLinear(MATCH_PARENT, 48, 0, 16f, 28f, 16f, 16f))
 
-        if (installedPlugin?.isEnabled() != true && !ExteraConfigCompat.isPluginsSafeMode())
+        if (installedPlugin?.isEnabled() != true && !ExteraConfigCompat.isPluginsSafeMode()) {
             content.addView(
                 createEnableAfterInstallationCheckbox(),
                 LayoutHelper.createLinear(
@@ -204,44 +209,54 @@ class PluginInstallBottomSheet(
                     8f,
                 ),
             )
+        }
 
         setCustomView(ScrollView(context).apply { addView(content) })
 
         AndroidUtilities.runOnUIThread(
             {
-                if (signature.blocksInstall) signatureChip.performClick()
-                else if (!wasSourceHintShown()) sourceChip?.performClick()
+                if (signature.blocksInstall)
+                    signatureChip.performClick()
+                else if (!wasSourceHintShown())
+                    sourceChip?.performClick()
             },
             600,
         )
     }
 
     private fun installButtonText(): String =
-        if (isUpdate) Strings.updatePlugin() else Strings.installPlugin()
+        if (isUpdate)
+            Strings.updatePlugin()
+        else
+            Strings.installPlugin()
 
     private fun createIcon(): View {
         val pack = plugin.getPack()
         val index = plugin.getIndex()
 
-        if (pack == null || index < 0) return createDefaultIcon()
+        if (pack == null || index < 0)
+            return createDefaultIcon()
 
-        return BackupImageView(context).apply {
-            imageReceiver.autoRepeat = 1
+        return BackupImageView(context)
+            .apply {
+                imageReceiver.autoRepeat = 1
 
-            MediaDataController.getInstance(UserConfig.selectedAccount)
-                .setPlaceholderImageByIndex(this, pack, index, "${ICON_SIZE}_$ICON_SIZE")
-        }
+                MediaDataController.getInstance(UserConfig.selectedAccount)
+                    .setPlaceholderImageByIndex(this, pack, index, "${ICON_SIZE}_$ICON_SIZE")
+            }
     }
 
-    private fun createDefaultIcon(): View =
-        ImageView(context).apply {
+    private fun createDefaultIcon(): View = ImageView(context)
+        .apply {
             scaleType = ImageView.ScaleType.FIT_CENTER
             setImageResource(R.drawable.plugins_filled)
+
             colorFilter =
                 PorterDuffColorFilter(
                     getThemedColor(Theme.key_featuredStickers_buttonText),
                     PorterDuff.Mode.SRC_IN,
                 )
+
             background =
                 Theme.createCircleDrawable(
                     dp(ICON_SIZE.toFloat()),
@@ -252,8 +267,8 @@ class PluginInstallBottomSheet(
             setPadding(padding, padding, padding, padding)
         }
 
-    private fun createTitle(): View =
-        TextView(context).apply {
+    private fun createTitle(): View = TextView(context)
+        .apply {
             gravity = Gravity.CENTER_HORIZONTAL
             setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlackText))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
@@ -261,8 +276,8 @@ class PluginInstallBottomSheet(
             text = plugin.getName()
         }
 
-    private fun createSubtitle(): View =
-        EffectsTextView(context, fragment.resourceProvider).apply {
+    private fun createSubtitle(): View = EffectsTextView(context, fragment.resourceProvider)
+        .apply {
             gravity = Gravity.CENTER_HORIZONTAL
             typeface = AndroidUtilities.regular()
             movementMethod = AndroidUtilities.LinkMovementMethodMy()
@@ -276,31 +291,42 @@ class PluginInstallBottomSheet(
                     .append(plugin.getVersion())
                     .append(" • ")
                     .append(
-                        LocaleUtils.formatWithUsernames(plugin.getAuthor(), fragment) { dismiss() }
+                        LocaleUtils
+                            .formatWithUsernames(plugin.getAuthor(), fragment) { dismiss() }
                     )
 
             text = subtitle
         }
 
     private fun createSourceChip(): View {
-        val chip =
-            createChip(
-                iconRes = if (params.trusted) R.drawable.trusted_mini else R.drawable.unknown_mini,
-                text = if (params.trusted) Strings.sourceTrusted() else Strings.sourceUnknown(),
-                color =
-                    getThemedColor(
-                        if (params.trusted) Theme.key_windowBackgroundWhiteGreenText
-                        else Theme.key_text_RedRegular
-                    ),
-            ) { anchor ->
-                showHint(
-                    anchor,
-                    if (params.trusted) Strings.sourceTrustedInfo()
-                    else Strings.sourceUnknownInfo(),
-                )
+        val chip = createChip(
+            iconRes = if (params.trusted)
+                R.drawable.trusted_mini
+            else
+                R.drawable.unknown_mini,
 
-                markSourceHintShown()
-            }
+            text = if (params.trusted)
+                Strings.sourceTrusted()
+            else
+                Strings.sourceUnknown(),
+
+            color = getThemedColor(
+                if (params.trusted)
+                    Theme.key_windowBackgroundWhiteGreenText
+                else
+                    Theme.key_text_RedRegular
+            ),
+        ) { anchor ->
+            showHint(
+                anchor,
+                if (params.trusted)
+                    Strings.sourceTrustedInfo()
+                else
+                    Strings.sourceUnknownInfo(),
+            )
+
+            markSourceHintShown()
+        }
 
         sourceChip = chip
         return chip
@@ -309,25 +335,24 @@ class PluginInstallBottomSheet(
     private fun createSignatureChip(): View {
         val chip =
             createChip(
-                iconRes =
-                    when (signature) {
-                        PluginSignatureState.TRUSTED -> R.drawable.trusted_mini
-                        PluginSignatureState.UNTRUSTED -> R.drawable.msg_mini_lock3
-                        PluginSignatureState.MISSING -> R.drawable.unknown_mini
-                        PluginSignatureState.EXPIRED,
-                        PluginSignatureState.REVOKED,
-                        PluginSignatureState.MISMATCH -> R.drawable.warning_sign
-                    },
+                iconRes = when (signature) {
+                    PluginSignatureState.TRUSTED -> R.drawable.trusted_mini
+                    PluginSignatureState.UNTRUSTED -> R.drawable.msg_mini_lock3
+                    PluginSignatureState.MISSING -> R.drawable.unknown_mini
+                    PluginSignatureState.EXPIRED,
+                    PluginSignatureState.REVOKED,
+                    PluginSignatureState.MISMATCH -> R.drawable.warning_sign
+                },
                 text = signatureChipText(),
-                color =
-                    getThemedColor(
-                        when (signature) {
-                            PluginSignatureState.TRUSTED -> Theme.key_windowBackgroundWhiteGreenText
-                            PluginSignatureState.UNTRUSTED ->
-                                Theme.key_windowBackgroundWhiteGrayText
-                            else -> Theme.key_text_RedRegular
-                        }
-                    ),
+                color = getThemedColor(
+                    when (signature) {
+                        PluginSignatureState.TRUSTED -> Theme.key_windowBackgroundWhiteGreenText
+                        PluginSignatureState.UNTRUSTED ->
+                            Theme.key_windowBackgroundWhiteGrayText
+
+                        else -> Theme.key_text_RedRegular
+                    }
+                ),
             ) { anchor ->
                 showHint(
                     anchor,
@@ -354,17 +379,17 @@ class PluginInstallBottomSheet(
         }
 
     private fun signatureChipText(): String {
-        val state =
-            when (signature) {
-                PluginSignatureState.TRUSTED -> Strings.signatureTrusted()
-                PluginSignatureState.UNTRUSTED -> Strings.signatureUntrusted()
-                PluginSignatureState.MISSING -> Strings.signatureMissing()
-                PluginSignatureState.EXPIRED -> Strings.signatureExpired()
-                PluginSignatureState.REVOKED -> Strings.signatureRevoked()
-                PluginSignatureState.MISMATCH -> Strings.signatureMismatch()
-            }
+        val state = when (signature) {
+            PluginSignatureState.TRUSTED -> Strings.signatureTrusted()
+            PluginSignatureState.UNTRUSTED -> Strings.signatureUntrusted()
+            PluginSignatureState.MISSING -> Strings.signatureMissing()
+            PluginSignatureState.EXPIRED -> Strings.signatureExpired()
+            PluginSignatureState.REVOKED -> Strings.signatureRevoked()
+            PluginSignatureState.MISMATCH -> Strings.signatureMismatch()
+        }
 
-        if (issuers.isEmpty()) return state
+        if (issuers.isEmpty())
+            return state
 
         return "$state • ${issuers.joinToString(", ")}"
     }
@@ -375,8 +400,8 @@ class PluginInstallBottomSheet(
         color: Int,
         onClick: (anchor: View) -> Unit,
     ): View {
-        val chip =
-            LinearLayout(context).apply {
+        val chip = LinearLayout(context)
+            .apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
                 background =
@@ -415,8 +440,8 @@ class PluginInstallBottomSheet(
     }
 
     private fun createEnableAfterInstallationCheckbox(): View {
-        val checkBox =
-            CheckBox2(context, 21, resourcesProvider).apply {
+        val checkBox = CheckBox2(context, 21, resourcesProvider)
+            .apply {
                 setColor(
                     Theme.key_radioBackgroundChecked,
                     Theme.key_checkboxDisabled,
@@ -427,27 +452,29 @@ class PluginInstallBottomSheet(
                 setDrawBackgroundAsArc(10)
             }
 
-        val row =
-            LinearLayout(context).apply {
+        val row = LinearLayout(context)
+            .apply {
                 orientation = LinearLayout.HORIZONTAL
                 setPadding(dp(8f), dp(6f), dp(10f), dp(6f))
 
                 addView(
-                    FrameLayout(context).apply {
-                        addView(
-                            checkBox,
-                            LayoutHelper.createFrame(21, 21f, Gravity.CENTER, 0f, 0f, 0f, 0f),
-                        )
-                    },
+                    FrameLayout(context)
+                        .apply {
+                            addView(
+                                checkBox,
+                                LayoutHelper.createFrame(21, 21f, Gravity.CENTER, 0f, 0f, 0f, 0f),
+                            )
+                        },
                     LayoutHelper.createLinear(24, 24, Gravity.CENTER_VERTICAL, 0f, 0f, 6f, 0f),
                 )
 
                 addView(
-                    TextView(context).apply {
-                        setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlackText))
-                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                        text = Strings.enableAfterInstallation()
-                    },
+                    TextView(context)
+                        .apply {
+                            setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlackText))
+                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                            text = Strings.enableAfterInstallation()
+                        },
                     LayoutHelper.createLinear(WRAP_CONTENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL),
                 )
 
@@ -465,8 +492,8 @@ class PluginInstallBottomSheet(
         return row
     }
 
-    private fun createDescription(): View =
-        EffectsTextView(context).apply {
+    private fun createDescription(): View = EffectsTextView(context)
+        .apply {
             gravity = Gravity.START
             typeface = AndroidUtilities.regular()
             movementMethod = AndroidUtilities.LinkMovementMethodMy()
@@ -488,22 +515,24 @@ class PluginInstallBottomSheet(
     private fun wasSourceHintShown(): Boolean =
         ExteraConfigCompat.getPreferences()
             .getBoolean(
-                if (params.trusted) HINT_SHOWN_TRUSTED_KEY else HINT_SHOWN_UNKNOWN_KEY,
+                if (params.trusted)
+                    HINT_SHOWN_TRUSTED_KEY
+                else
+                    HINT_SHOWN_UNKNOWN_KEY,
                 false,
             )
 
     private fun showHint(anchor: View, text: CharSequence) {
         currentHint?.hide()
 
-        val hint =
-            HintView2(context, HINT_DIRECTION)
-                .setMultilineText(true)
-                .setBgColor(getThemedColor(Theme.key_undo_background))
-                .setTextColor(getThemedColor(Theme.key_undo_infoColor))
-                .setText(AndroidUtilities.replaceTags(text.toString()))
-                .setTextAlign(Layout.Alignment.ALIGN_CENTER)
-                .allowBlur(true)
-                .setRounding(12f)
+        val hint = HintView2(context, HINT_DIRECTION)
+            .setMultilineText(true)
+            .setBgColor(getThemedColor(Theme.key_undo_background))
+            .setTextColor(getThemedColor(Theme.key_undo_infoColor))
+            .setText(AndroidUtilities.replaceTags(text.toString()))
+            .setTextAlign(Layout.Alignment.ALIGN_CENTER)
+            .allowBlur(true)
+            .setRounding(12f)
 
         hint.setMaxWidthPx(HintView2.cutInFancyHalf(hint.text, hint.textPaint))
 
@@ -541,13 +570,17 @@ class PluginInstallBottomSheet(
     private fun markSourceHintShown() =
         ExteraConfigCompat.getEditor()
             .putBoolean(
-                if (params.trusted) HINT_SHOWN_TRUSTED_KEY else HINT_SHOWN_UNKNOWN_KEY,
+                if (params.trusted)
+                    HINT_SHOWN_TRUSTED_KEY
+                else
+                    HINT_SHOWN_UNKNOWN_KEY,
                 true,
             )
             .apply()
 
     private fun onInstallClick() {
-        if (installing || signature.blocksInstall) return
+        if (installing || signature.blocksInstall)
+            return
 
         installing = true
         button.isLoading = true
@@ -575,9 +608,7 @@ class PluginInstallBottomSheet(
                     R.raw.error,
                     Strings.installError(plugin.getName()),
                     LocaleUtils.createCopySpan(fragment),
-                ) {
-                    copyToClipboard(error)
-                }
+                ) { copyToClipboard(error) }
                 .show()
 
             return
@@ -586,19 +617,22 @@ class PluginInstallBottomSheet(
         dismiss()
 
         if (enableAfterInstallation && !ExteraConfigCompat.isPluginsSafeMode()) {
-            PluginsController.getInstance().setPluginEnabled(plugin.getId(), true) { enableError ->
-                if (enableError == null) showSuccessBulletin()
-                else
-                    BulletinFactory.of(fragment)
-                        .createSimpleBulletin(
-                            R.raw.error,
-                            Strings.installedButFailedToEnable(plugin.getName()),
-                            LocaleUtils.createCopySpan(fragment),
-                        ) {
-                            copyToClipboard(enableError)
-                        }
-                        .show()
-            }
+            PluginsController.getInstance()
+                .setPluginEnabled(plugin.getId(), true) { enableError ->
+                    if (enableError == null)
+                        showSuccessBulletin()
+                    else {
+                        BulletinFactory.of(fragment)
+                            .createSimpleBulletin(
+                                R.raw.error,
+                                Strings.installedButFailedToEnable(plugin.getName()),
+                                LocaleUtils.createCopySpan(fragment),
+                            ) {
+                                copyToClipboard(enableError)
+                            }
+                            .show()
+                    }
+                }
 
             return
         }
@@ -607,15 +641,23 @@ class PluginInstallBottomSheet(
     }
 
     private fun showSuccessBulletin() {
-        val message =
-            if (isUpdate) Strings.updated(plugin.getName()) else Strings.installed(plugin.getName())
+        val message = if (isUpdate)
+            Strings.updated(plugin.getName())
+        else
+            Strings.installed(plugin.getName())
 
-        BulletinFactory.of(fragment).createSimpleBulletin(R.raw.contact_check, message).show()
+        BulletinFactory.of(fragment)
+            .createSimpleBulletin(R.raw.contact_check, message)
+            .show()
     }
 
     private fun copyToClipboard(text: String) {
-        if (AndroidUtilities.addToClipboard(text))
-            BulletinFactory.of(fragment).createCopyBulletin(Strings.textCopied()).show()
+        if (!AndroidUtilities.addToClipboard(text))
+            return
+
+        BulletinFactory.of(fragment)
+            .createCopyBulletin(Strings.textCopied())
+            .show()
     }
 
     override fun onSwipeStarts() {

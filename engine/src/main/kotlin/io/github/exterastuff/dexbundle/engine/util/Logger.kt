@@ -28,7 +28,7 @@ object Logger : EjectNotifier.Delegate {
             .take(4)
             .let { "${Plugin.ID}[$it]" }
 
-    @Volatile private var suppressFatal = false
+    @Volatile private var isFatalSuppressed = false
 
     fun debug(message: String) {
         Log.d(ID, message)
@@ -48,14 +48,14 @@ object Logger : EjectNotifier.Delegate {
 
     /** Оставляет [fatal] без последствий: плагин уже выгружается. */
     internal fun suppressFatal() {
-        suppressFatal = true
+        isFatalSuppressed = true
     }
 
     fun fatal(message: String, exception: Throwable, preventEject: Boolean = false) {
         Log.wtf(ID, message)
         Log.wtf(ID, exception.format())
 
-        if (!suppressFatal && !preventEject) Plugin.eject()
+        if (!isFatalSuppressed && !preventEject) Plugin.eject()
     }
 
     fun tryOrFatal(action: String, block: () -> Unit): Unit? =
