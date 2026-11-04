@@ -50,6 +50,7 @@ class PluginInstallBottomSheet(
     private val signature: PluginSignatureState,
     signers: Map<String, SignerInfo>?,
     private val dependencies: List<String>,
+    private val onClosed: ((installed: Boolean) -> Unit)?,
 ) : BottomSheet(fragment.parentActivity, false, fragment.resourceProvider), EjectNotifier.Delegate {
 
     companion object {
@@ -69,6 +70,7 @@ class PluginInstallBottomSheet(
             signature: PluginSignatureState,
             signers: Map<String, SignerInfo>?,
             dependencies: List<String> = emptyList(),
+            onClosed: ((installed: Boolean) -> Unit)? = null,
         ) = runOnMainThread {
             PluginInstallBottomSheet(
                 fragment,
@@ -78,6 +80,7 @@ class PluginInstallBottomSheet(
                 signature,
                 signers,
                 dependencies,
+                onClosed,
             )
                 .show()
         }
@@ -92,6 +95,10 @@ class PluginInstallBottomSheet(
     private var enableAfterInstallation = false
 
     private var installing = false
+
+    private var installed = false
+
+    private var closed = false
 
     private var currentHint: HintView2? = null
 
@@ -614,6 +621,8 @@ class PluginInstallBottomSheet(
             return
         }
 
+        installed = true
+
         dismiss()
 
         if (enableAfterInstallation && !ExteraConfigCompat.isPluginsSafeMode()) {
@@ -670,6 +679,11 @@ class PluginInstallBottomSheet(
         currentHint = null
 
         super.dismiss()
+
+        if (!closed) {
+            closed = true
+            onClosed?.invoke(installed)
+        }
     }
 
     override fun onStop() {

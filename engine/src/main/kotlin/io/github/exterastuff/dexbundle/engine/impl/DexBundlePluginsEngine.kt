@@ -13,6 +13,7 @@ import io.github.exterastuff.dexbundle.api.PluginContext
 import io.github.exterastuff.dexbundle.api.PluginLogger
 import io.github.exterastuff.dexbundle.engine.compat.ExteraConfigCompat
 import io.github.exterastuff.dexbundle.engine.download.PluginDownloader
+import io.github.exterastuff.dexbundle.engine.download.PluginUpdater
 import io.github.exterastuff.dexbundle.engine.exception.UnsatisfiedRequirementException
 import io.github.exterastuff.dexbundle.engine.extension.format
 import io.github.exterastuff.dexbundle.engine.i18n.Strings
@@ -31,6 +32,7 @@ import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.Components.BulletinFactory
+import org.telegram.ui.LaunchActivity
 import java.io.File
 import java.io.IOException
 import java.lang.reflect.InvocationTargetException
@@ -787,12 +789,73 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
 
             rebuildServices(enabled)
             loadPlugins(enabled)
+
+            scheduleUpdateCheck()
         } catch (e: Throwable) {
             warn("Failed to initialize plugins engine: ${e.format()}")
         } finally {
             pluginsController.notifyPluginsChanged()
 
             callback.run()
+        }
+    }
+
+    /** Ищет обновления установленных плагинов в фоне и предлагает их по одному. */
+    private fun scheduleUpdateCheck() {
+        val installed = manifests.values.toList()
+
+        PluginDownloader.executor.execute {
+            // скачанное прошлой сессией уже никто не покажет
+            PluginDownloader.clearDownloads()
+
+            val updates = ArrayList<PluginDownloader.Download>()
+
+            try {
+                PluginUpdater.check(pluginsController.preferences, installed, updates::add)
+            } catch (e: Throwable) {
+                warn("Failed to check updates: ${e.format()}")
+            }
+
+            if (updates.isNotEmpty())
+                runOnMainThread { offerUpdates(updates) }
+        }
+    }
+
+    /** Показывает диалог обновления для первой из [updates], а после него — для следующих. */
+    private fun offerUpdates(updates: List<PluginDownloader.Download>) {
+        val update = updates.firstOrNull()
+            ?: return
+
+        val rest = updates.drop(1)
+
+        val fragment = LaunchActivity.getSafeLastFragment()
+
+        if (fragment?.parentActivity == null) {
+            updates.forEach { it.file.delete() }
+            return
+        }
+
+        val manifest = update.manifest
+
+        PluginInstallBottomSheet.show(
+            fragment,
+            this,
+            manifest.toPlugin(),
+            InstallPluginBottomSheet.PluginInstallParams(update.file.absolutePath, false),
+            PluginSignatureState.of(manifest.signers, installedSigners(manifest.id)),
+            manifest.signers,
+            missingDependencies(manifest).keys.toList(),
+        ) { installed ->
+            if (!installed)
+                PluginUpdater.skipVersion(
+                    pluginsController.preferences,
+                    manifest.id,
+                    manifest.version,
+                )
+
+            update.file.delete()
+
+            offerUpdates(rest)
         }
     }
 
