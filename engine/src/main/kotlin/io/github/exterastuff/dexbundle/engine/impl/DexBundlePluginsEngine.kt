@@ -5,6 +5,7 @@ import androidx.annotation.WorkerThread
 import com.exteragram.messenger.plugins.Plugin
 import com.exteragram.messenger.plugins.PluginsController
 import com.exteragram.messenger.plugins.hooks.PluginsHooks
+import com.exteragram.messenger.plugins.pip.PipController
 import com.exteragram.messenger.plugins.models.SettingItem
 import com.exteragram.messenger.plugins.ui.components.InstallPluginBottomSheet
 import dalvik.system.DexClassLoader
@@ -1032,6 +1033,23 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
 
         // сообщаем
         runOnMainThread { callback?.run(null) }
+    }
+
+    override fun loadPluginFromFile(
+        filePath: String,
+        pluginMetadata: Plugin?,
+        callback: Utilities.Callback<String>?,
+        delegate: PipController.InstallerDelegate?,
+    ) {
+        val pluginId = pluginMetadata?.getId()
+            ?: runCatching { PluginManifest.of(File(filePath))?.id }.getOrNull()
+
+        if (pluginId == null) {
+            runOnMainThread { callback?.run("Invalid plugin manifest") }
+            return
+        }
+
+        install(pluginId, filePath) { error -> runOnMainThread { callback?.run(error) } }
     }
 
     override fun getPluginPath(id: String): String = pluginFile(id).absolutePath
