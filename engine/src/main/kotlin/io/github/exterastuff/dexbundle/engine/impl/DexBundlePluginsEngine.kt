@@ -1,12 +1,14 @@
 package io.github.exterastuff.dexbundle.engine.impl
 
+import android.content.Intent
 import android.util.Log
 import androidx.annotation.WorkerThread
+import androidx.core.content.FileProvider
 import com.exteragram.messenger.plugins.Plugin
 import com.exteragram.messenger.plugins.PluginsController
 import com.exteragram.messenger.plugins.hooks.PluginsHooks
-import com.exteragram.messenger.plugins.pip.PipController
 import com.exteragram.messenger.plugins.models.SettingItem
+import com.exteragram.messenger.plugins.pip.PipController
 import com.exteragram.messenger.plugins.ui.components.InstallPluginBottomSheet
 import dalvik.system.DexClassLoader
 import io.github.exterastuff.dexbundle.api.BasePlugin
@@ -25,6 +27,7 @@ import io.github.exterastuff.dexbundle.engine.util.compareVersions
 import io.github.exterastuff.dexbundle.engine.util.runOnMainThread
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.BuildVars
+import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.R
 import org.telegram.messenger.SendMessagesHelper
@@ -1062,6 +1065,41 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
 
     override fun sharePlugin(id: String) {
         info("share plugin '$id'")
+
+        val fragment = LaunchActivity.getSafeLastFragment()
+            ?: return
+
+        val activity = fragment.parentActivity
+            ?: return
+
+        try {
+            val tempDir = File(ApplicationLoader.getFilesDirFixed(), "temp")
+                .apply { mkdirs() }
+
+            val pluginFile = File(tempDir, "$id.$PLUGINS_EXTENSION")
+                .apply {
+                    pluginFile(id).copyTo(this, overwrite = true)
+                    deleteOnExit()
+                }
+
+            val uri = FileProvider.getUriForFile(
+                activity,
+                "${ApplicationLoader.getApplicationId()}.provider",
+                pluginFile,
+            )
+
+            val intent = Intent(Intent.ACTION_SEND)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                .putExtra(Intent.EXTRA_STREAM, uri)
+                .setType("application/java-archive")
+
+            fragment.startActivityForResult(
+                Intent.createChooser(intent, LocaleController.getString(R.string.ShareFile)),
+                500,
+            )
+        } catch (e: Throwable) {
+            warn("Failed to share plugin '$id': ${e.format()}")
+        }
     }
 
     override fun loadPluginSettings(id: String): List<SettingItem> {
