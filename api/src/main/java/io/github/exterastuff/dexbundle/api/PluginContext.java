@@ -3,6 +3,10 @@ package io.github.exterastuff.dexbundle.api;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.lang.reflect.Member;
+
+import de.robv.android.xposed.XC_MethodHook;
+
 public interface PluginContext {
     /**
      * Получает собственный инстанс логгера.
@@ -46,4 +50,28 @@ public interface PluginContext {
      * {@code null}
      */
     <T> @Nullable T getService(@NotNull Class<T> klass);
+
+    /**
+     * Устанавливает хук на метод или конструктор и привязывает его к текущему плагину.
+     * <p>
+     * При выгрузке плагина движок автоматически снимает установленные через этот метод хуки. Для
+     * досрочного снятия хука используйте {@link #removeHook(XC_MethodHook.Unhook)}.
+     *
+     * @param targetMember метод или конструктор, на который устанавливается хук
+     * @param methodHook   обработчик вызовов метода или конструктора
+     *
+     * @return объект для снятия установленного хука
+     */
+    @NotNull XC_MethodHook.Unhook installHook(@NotNull Member targetMember, @NotNull XC_MethodHook methodHook);
+
+    /**
+     * Снимает хук, зарегистрированный в текущем контексте через
+     * {@link #installHook(Member, XC_MethodHook)}, и удаляет его из учёта движка.
+     *
+     * @param methodUnhook объект для снятия хука
+     *
+     * @return {@code true}, если хук был зарегистрирован в текущем контексте и снят, иначе
+     * {@code false}
+     */
+    boolean removeHook(@NotNull XC_MethodHook.Unhook methodUnhook);
 }

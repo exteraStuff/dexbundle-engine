@@ -11,6 +11,8 @@ import com.exteragram.messenger.plugins.models.SettingItem
 import com.exteragram.messenger.plugins.pip.PipController
 import com.exteragram.messenger.plugins.ui.components.InstallPluginBottomSheet
 import dalvik.system.DexClassLoader
+import de.robv.android.xposed.XC_MethodHook
+import de.robv.android.xposed.XposedBridge
 import io.github.exterastuff.dexbundle.api.BasePlugin
 import io.github.exterastuff.dexbundle.api.PluginContext
 import io.github.exterastuff.dexbundle.api.PluginLogger
@@ -40,6 +42,7 @@ import org.telegram.ui.LaunchActivity
 import java.io.File
 import java.io.IOException
 import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.Member
 import java.util.concurrent.ConcurrentHashMap
 
 class DexBundlePluginsEngine : PluginsController.PluginsEngine {
@@ -1263,28 +1266,35 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
         @Volatile
         private var attached = true
 
+        private val hooks: ArrayList<XC_MethodHook.Unhook> = arrayListOf()
+
         private val logger =
             object : PluginLogger {
-                override fun debug(message: String?) {
-                    Log.d(id, message ?: "null")
+                override fun debug(message: String) {
+                    Log.d(id, message)
                 }
 
-                override fun info(message: String?) {
-                    Log.i(id, message ?: "null")
+                override fun info(message: String) {
+                    Log.i(id, message)
                 }
 
-                override fun warn(message: String?) {
-                    Log.w(id, message ?: "null")
+                override fun warn(message: String) {
+                    Log.w(id, message)
                 }
 
-                override fun error(message: String?) {
-                    Log.e(id, message ?: "null")
+                override fun error(message: String) {
+                    Log.e(id, message)
                 }
             }
 
         /** Отвязывает контекст от движка после выгрузки плагина. */
         fun detach() {
             attached = false
+
+            synchronized(hooks) {
+                hooks.forEach(XC_MethodHook.Unhook::unhook)
+                hooks.clear()
+            }
         }
 
         override fun getLogger(): PluginLogger = logger
@@ -1316,6 +1326,24 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
             check(attached) { "Plugin '$id' is unloaded" }
 
             return services.getService(klass)
+        }
+
+        override fun installHook(
+            targetMember: Member,
+            methodHook: XC_MethodHook
+        ): XC_MethodHook.Unhook = synchronized(hooks) {
+            val unhook = XposedBridge.hookMethod(targetMember, methodHook)
+            hooks.add(unhook)
+
+            return@synchronized unhook
+        }
+
+        override fun removeHook(methodUnhook: XC_MethodHook.Unhook): Boolean = synchronized(hooks) {
+            if (!hooks.remove(methodUnhook))
+                return@synchronized false
+
+            methodUnhook.unhook()
+            return@synchronized true
         }
     }
 }
