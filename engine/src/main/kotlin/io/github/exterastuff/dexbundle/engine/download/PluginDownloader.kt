@@ -2,10 +2,8 @@ package io.github.exterastuff.dexbundle.engine.download
 
 import androidx.annotation.WorkerThread
 import com.exteragram.messenger.utils.network.ExteraHttpClient
-import io.github.exterastuff.dexbundle.engine.extension.format
 import io.github.exterastuff.dexbundle.engine.impl.DownloadSource
 import io.github.exterastuff.dexbundle.engine.impl.PluginManifest
-import io.github.exterastuff.dexbundle.engine.util.Logger
 import okhttp3.Request
 import org.json.JSONObject
 import org.telegram.messenger.AndroidUtilities
@@ -23,7 +21,6 @@ import java.io.IOException
 import java.net.URLEncoder
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
-import java.security.MessageDigest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -71,47 +68,7 @@ object PluginDownloader {
         if (sources.isEmpty())
             throw IOException("Plugin '$pluginId' has no download sources")
 
-        val directory = downloadsDir
-
-        if (!directory.isDirectory && !directory.mkdirs())
-            throw IOException("Failed to create ${directory.absolutePath}")
-
-        val errors = ArrayList<Throwable>()
-
-        for (source in sources) {
-            val target = File.createTempFile("$pluginId-", ".jar", directory)
-
-            try {
-                fetch(source, target)
-
-                source.sha1?.let { expected ->
-                    val actual = sha1(target)
-
-                    if (actual != expected)
-                        throw IOException("$source serves a file with sha1 $actual, $expected expected")
-                }
-
-                val manifest = PluginManifest.of(target)
-                    ?: throw IOException("$source serves a file that is not a plugin")
-
-                if (manifest.id != pluginId)
-                    throw IOException("$source serves plugin '${manifest.id}', but '$pluginId' was expected")
-
-                return Download(target, manifest)
-            } catch (e: Throwable) {
-                target.delete()
-
-                Logger.warn("Failed to download '$pluginId' from $source: ${e.format()}")
-
-                errors.add(e)
-            }
-        }
-
-        throw IOException(
-            "Failed to download plugin '$pluginId': " +
-                    errors.joinToString("; ") { it.message ?: it.toString() }
-        )
-            .apply { errors.forEach(::addSuppressed) }
+        return DownloadPipeline.download(pluginId, sources, downloadsDir, ::fetch)
     }
 
     @Throws(IOException::class)
@@ -121,25 +78,6 @@ object PluginDownloader {
             is DownloadSource.GitHub -> fetchGitHub(source, target)
             is DownloadSource.Telegram -> fetchTelegram(source, target)
         }
-
-    private fun sha1(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-1")
-
-        file.inputStream().use { input ->
-            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-
-            while (true) {
-                val read = input.read(buffer)
-
-                if (read < 0)
-                    break
-
-                digest.update(buffer, 0, read)
-            }
-        }
-
-        return digest.digest().joinToString("") { "%02x".format(it) }
-    }
 
     private fun request(url: String, accept: String? = null): Request =
         Request.Builder()

@@ -42,19 +42,19 @@ object MessagePluralFormatter : MessageValueFormatter {
         if (style is StylePartMessage)
             return style.messagePart
 
-        var found = false
-
+        var selector: CharSequence? = null
+        var fallback: MessagePart? = null
         if (style is StylePartList) {
             for (part in style.list) {
-                if (part is StylePartArgument && (part.value == category || part.value == OTHER))
-                    found = true
-
-                if (part is StylePartMessage && found)
-                    return part.messagePart
+                if (part is StylePartArgument) selector = part.value
+                if (part is StylePartMessage) {
+                    if (selector == category) return part.messagePart
+                    if (selector == OTHER && fallback == null) fallback = part.messagePart
+                    selector = null
+                }
             }
         }
-
-        return null
+        return fallback
     }
 
     private fun pluralCategory(count: Int, lang: String): String {

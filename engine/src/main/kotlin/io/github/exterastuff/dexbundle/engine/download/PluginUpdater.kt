@@ -3,6 +3,7 @@ package io.github.exterastuff.dexbundle.engine.download
 import android.content.SharedPreferences
 import androidx.annotation.WorkerThread
 import io.github.exterastuff.dexbundle.engine.extension.format
+import io.github.exterastuff.dexbundle.engine.impl.DownloadSource
 import io.github.exterastuff.dexbundle.engine.impl.PluginManifest
 import io.github.exterastuff.dexbundle.engine.util.Logger
 import io.github.exterastuff.dexbundle.engine.util.compareVersions
@@ -26,8 +27,15 @@ object PluginUpdater {
         preferences: SharedPreferences,
         installed: Collection<PluginManifest>,
         onUpdate: (PluginDownloader.Download) -> Unit,
+    ) = check(preferences, installed, onUpdate, System.currentTimeMillis(), PluginDownloader::download)
+
+    internal fun check(
+        preferences: SharedPreferences,
+        installed: Collection<PluginManifest>,
+        onUpdate: (PluginDownloader.Download) -> Unit,
+        now: Long,
+        downloadPlugin: (String, List<DownloadSource>) -> PluginDownloader.Download,
     ) {
-        val now = System.currentTimeMillis()
 
         if ((now - preferences.getLong(LAST_CHECK_KEY, 0)) in 0..<CHECK_INTERVAL_MS)
             return
@@ -46,7 +54,7 @@ object PluginUpdater {
                 continue
 
             val download = try {
-                PluginDownloader.download(manifest.id, manifest.updateSources)
+                downloadPlugin(manifest.id, manifest.updateSources)
             } catch (e: Throwable) {
                 Logger.warn("Failed to check updates of '${manifest.id}': ${e.format()}")
                 continue

@@ -15,6 +15,7 @@ buildscript {
 }
 
 plugins {
+    jacoco
     // Android itself.
     id("com.android.library") version "9.5.0"
 
@@ -32,6 +33,8 @@ i18n4k {
 }
 
 android {
+    testOptions.unitTests.isReturnDefaultValues = true
+
     namespace = "io.github.exterastuff.dexbundle.engine"
 
     buildFeatures {
@@ -82,6 +85,9 @@ kotlin {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.mockito:mockito-core:5.14.2")
+
     // Plugin API.
     api(project(":api"))
 
@@ -142,4 +148,18 @@ extera {
     }
 
     dexOutputDir = project.layout.projectDirectory.dir("../dist/dex")
+}
+
+jacoco { toolVersion = "0.8.13" }
+
+// Включаем код интеграции с хостом в отчёт, чтобы непокрытые адаптеры оставались видны.
+tasks.register<JacocoReport>("jacocoDebugUnitTestReport") {
+    dependsOn("testDebugUnitTest")
+    executionData(layout.buildDirectory.file("outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec"))
+    classDirectories.setFrom(
+        fileTree(layout.buildDirectory.dir("intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes")),
+        fileTree(layout.buildDirectory.dir("intermediates/javac/debug/compileDebugJavaWithJavac/classes")),
+    )
+    sourceDirectories.setFrom(files("src/main/kotlin", "src/main/java"))
+    reports { xml.required.set(true); html.required.set(true) }
 }

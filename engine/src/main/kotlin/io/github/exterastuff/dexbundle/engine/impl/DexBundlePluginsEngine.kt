@@ -182,50 +182,14 @@ class DexBundlePluginsEngine : PluginsController.PluginsEngine {
 
     /** [ids] и все установленные плагины, которые от них зависят, прямо или нет. */
     private fun pluginsAffectedBy(ids: Collection<String>): Set<String> {
-        val result = LinkedHashSet(ids)
-
-        do {
-            val dependents =
-                manifests
-                    .filterKeys { pluginId -> pluginId !in result }
-                    .filterValues { manifest ->
-                        manifest.dependencies
-                            .keys
-                            .any { pluginId -> pluginId in result }
-                    }
-                    .keys
-
-            result.addAll(dependents)
-        } while (dependents.isNotEmpty())
-
-        return result
+        return DependencyGraph(manifests.mapValues { it.value.dependencies.keys })
+            .affectedBy(ids)
     }
 
     /** [pluginIds] в порядке, где плагин идёт после тех, от кого зависит. */
-    private fun dependencyOrder(pluginIds: Collection<String>): List<String> {
-        val pending = pluginIds.toSet()
-        val ordered = LinkedHashSet<String>()
-        val visiting = LinkedHashSet<String>()
-
-        fun visit(pluginId: String) {
-            if (pluginId !in pending || pluginId in ordered) return
-
-            // ура dep-cycle
-            if (!visiting.add(pluginId)) {
-                warn("Dependency cycle: ${visiting.joinToString(" -> ")} -> $pluginId")
-                return
-            }
-
-            manifests[pluginId]?.dependencies?.keys?.forEach { visit(it) }
-
-            visiting.remove(pluginId)
-            ordered.add(pluginId)
-        }
-
-        pluginIds.forEach { visit(it) }
-
-        return ordered.toList()
-    }
+    private fun dependencyOrder(pluginIds: Collection<String>): List<String> =
+        DependencyGraph(manifests.mapValues { it.value.dependencies.keys })
+            .order(pluginIds) { warn("Dependency cycle: ${it.joinToString(" -> ")}") }
 
     /** Сообщает [dependentId], что его зависимость [dependencyId] сейчас выгрузят. */
     private fun notifyDependencyUnload(dependentId: String, dependencyId: String) {

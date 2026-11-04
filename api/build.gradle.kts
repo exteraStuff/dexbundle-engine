@@ -1,6 +1,7 @@
 import java.util.zip.ZipFile
 
 plugins {
+    jacoco
     id("java-library")
     id("maven-publish")
 }
@@ -27,9 +28,16 @@ abstract class AarToJarTransform : TransformAction<TransformParameters.None> {
 }
 
 dependencies {
+    testImplementation(libs.junit.junit)
+
     registerTransform(AarToJarTransform::class) {
         from.attribute(artifactType, "aar")
         to.attribute(artifactType, "jar")
+    }
+
+    testImplementation(libs.aliuhook) {
+        isTransitive = false
+        attributes { attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements::class.java, "aar")) }
     }
 
     compileOnly(libs.aliuhook) {
@@ -65,4 +73,14 @@ publishing {
             from(components["java"])
         }
     }
+}
+
+configurations.testCompileClasspath { attributes { attribute(artifactType, "jar") } }
+configurations.testRuntimeClasspath { attributes { attribute(artifactType, "jar") } }
+
+jacoco { toolVersion = "0.8.13" }
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports { xml.required.set(true); html.required.set(true) }
 }

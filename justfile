@@ -88,3 +88,12 @@ update-apk PATH_TO_APK: (_require "dex2jar" "git")
 # generate stubs for python
 gen-stubs PATH_TO_RT_JAR PATH_TO_ANDROID_JAR: (_require "java2pyi")
     java2pyi {{ PATH_TO_RT_JAR }} {{ PATH_TO_ANDROID_JAR }} {{ TELEGRAM_JAR_PATH }} -o stubs/
+
+# Запустить JVM- и Python-тесты без устройства и запущенного Telegram.
+test: (_require "java" "python3")
+    ./gradlew :api:test :engine:testDebugUnitTest
+    python3 -m unittest discover -s tests -v
+
+# Сформировать HTML/XML-отчёты о покрытии основного JVM-кода.
+coverage: (_require "java")
+    ./gradlew :api:jacocoTestReport :engine:jacocoDebugUnitTestReport

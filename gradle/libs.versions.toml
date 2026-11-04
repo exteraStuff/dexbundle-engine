@@ -2,6 +2,7 @@
 aliuhook = "1.1.4"
 annotations = "26.1.0"
 desugar_jdk_libs = "2.1.5"
+junitVersion = "4.13.2"
 kotlin = "2.4.21"
 kotlinxCoroutinesCore = "1.11.0"
 kotlinxCollectionsImmutable = "0.5.2"
@@ -14,6 +15,7 @@ aliuhook = { module = "com.aliucord:Aliuhook", version.ref = "aliuhook" }
 annotations = { module = "org.jetbrains:annotations", version.ref = "annotations" }
 desugar_jdk_libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugar_jdk_libs" }
 jetbrains-kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
+junit-junit = { module = "junit:junit", version.ref = "junitVersion" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutinesCore" }
 kotlinx-collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version.ref = "kotlinxCollectionsImmutable" }
 i18n4k-core = { module = "de.comahe.i18n4k:i18n4k-core", version.ref = "i18n4k" }
