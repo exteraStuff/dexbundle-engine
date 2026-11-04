@@ -16,7 +16,9 @@ buildscript {
 
 plugins {
     // Android itself.
-    id("com.android.library") version "9.4.1"
+    id("com.android.library") version "9.5.0"
+
+    alias(libs.plugins.kotlin.android) apply false
 
     // Translations.
     id("de.comahe.i18n4k") version "0.11.2"
@@ -73,7 +75,6 @@ kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_11)
 
-        freeCompilerArgs.add("-Xmetadata-version=2.2.0")
         freeCompilerArgs.add("-Xdont-warn-on-error-suppression")
 
         optIn.add("kotlin.time.ExperimentalTime")
