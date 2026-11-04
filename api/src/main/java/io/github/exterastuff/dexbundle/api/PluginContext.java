@@ -1,12 +1,15 @@
 package io.github.exterastuff.dexbundle.api;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
 public interface PluginContext {
     /**
      * Получает собственный инстанс логгера.
      *
      * @return именованный логгер
      */
-    PluginLogger getLogger();
+    @NotNull PluginLogger getLogger();
 
     /**
      * Выгружает текущий плагин и устанавливает статус ошибки, если она стала причиной этого.
@@ -16,7 +19,7 @@ public interface PluginContext {
      *
      * @param error ошибка приведшая к выгрузке плагина, может быть null
      */
-    void unloadSelf(Throwable error);
+    void unloadSelf(@Nullable Throwable error);
 
     /**
      * Регистрирует переданный сервис, который могут использовать другие плагины через метод
@@ -30,7 +33,7 @@ public interface PluginContext {
      * @param <T>            интерфейс сервиса
      * @param <I>            тип класса реализующего интерфейс сервиса
      */
-    <T, I extends T> void registerService(Class<T> declaration, I implementation);
+    <T, I extends T> void registerService(@NotNull Class<T> declaration, @NotNull I implementation);
 
     /**
      * Получает сервис, зарегистрированный другим плагином через
@@ -42,5 +45,5 @@ public interface PluginContext {
      * @return инстанс класса реализующего интерфейс сервиса, если он был зарегистрирован, иначе
      * {@code null}
      */
-    <T> T getService(Class<T> klass);
+    <T> @Nullable T getService(@NotNull Class<T> klass);
 }

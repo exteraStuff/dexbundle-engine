@@ -1,5 +1,7 @@
 package io.github.exterastuff.dexbundle.api;
 
+import org.jetbrains.annotations.NotNull;
+
 public abstract class BasePlugin {
     /**
      * Защита от случайного вызова метода BasePlugin::load.
@@ -20,7 +22,7 @@ public abstract class BasePlugin {
     protected PluginContext context;
     protected PluginLogger logger;
 
-    public final void load(PluginContext context) {
+    public final void load(@NotNull PluginContext context) {
         if (WAS_LOADED)
             throw new IllegalStateException("This method cannot be called twice");
 
@@ -60,7 +62,7 @@ public abstract class BasePlugin {
      *
      * @param pluginId идентификатор выгружаемого плагина
      */
-    public void onDependencyUnload(String pluginId) {
+    public void onDependencyUnload(@NotNull String pluginId) {
     }
 
     protected abstract void onLoad();

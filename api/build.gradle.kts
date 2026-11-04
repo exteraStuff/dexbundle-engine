@@ -7,6 +7,10 @@ group = "io.github.exterastuff.dexbundle"
 
 version = "0.1.0"
 
+dependencies {
+    implementation(libs.annotations)
+}
+
 java {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11

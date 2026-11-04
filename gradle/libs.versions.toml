@@ -1,5 +1,6 @@
 [versions]
 aliuhook = "1.1.4"
+annotations = "26.1.0"
 desugar_jdk_libs = "2.1.5"
 kotlin = "2.4.21"
 kotlinxCoroutinesCore = "1.11.0"
@@ -10,6 +11,7 @@ lifecycle = "2.11.0"
 
 [libraries]
 aliuhook = { module = "com.aliucord:Aliuhook", version.ref = "aliuhook" }
+annotations = { module = "org.jetbrains:annotations", version.ref = "annotations" }
 desugar_jdk_libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugar_jdk_libs" }
 jetbrains-kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutinesCore" }
